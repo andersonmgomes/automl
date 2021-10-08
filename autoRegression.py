@@ -25,6 +25,9 @@ class AutoRegression:
         self.algorithms = algorithms
         
     def getBestModel(self):
+        return self.getBestResult().model_instance
+
+    def getBestResult(self):
         return self.getResults().iloc[0]
     
     def getResults(self, buffer=True):
@@ -88,5 +91,7 @@ autoreg = AutoRegression(getDSPriceHousing(), 'Price')
                          #, metric_order=METRICS_R2, algorithms = [svm.SVR()])
 model = autoreg.getBestModel()
 print(autoreg.getResults().head())
+print(autoreg.getBestResult())
+print(autoreg.getBestModel())
 
 
