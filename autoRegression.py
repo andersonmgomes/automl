@@ -1,3 +1,4 @@
+from sklearn.base import ClassifierMixin, RegressorMixin
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error
 from sklearn.metrics import r2_score, mean_squared_error
@@ -15,7 +16,9 @@ METRICS_MSE = 'MSE'
 
 class AutoRegression:
     def __init__(self, ds, y_colname, metric_order=METRICS_R2
-                 , algorithms = [linear_model.LinearRegression(), svm.SVR(), tree.DecisionTreeRegressor()]) -> None:
+                 , algorithms = [linear_model.LinearRegression(), svm.SVR(), tree.DecisionTreeRegressor()]
+                 , unique_categoric_limit = 15) -> None:
+        self.__unique_categoric_limit = unique_categoric_limit
         self.__ds_full = ds
         self.__ds_onlynums = self.__ds_full.select_dtypes(exclude=['object'])
         self.__X_full = self.__ds_onlynums.drop(columns=[y_colname])
@@ -24,10 +27,20 @@ class AutoRegression:
         self.metric_order = metric_order
         self.algorithms = algorithms
         
+    def addAlgorithm(self, algo):
+        self.algorithms.append(algo)
+        self.__results = None #cleaning the previous results
+    
     def getBestModel(self):
+        if self.getBestResult() is None:
+            return None
+        #else
         return self.getBestResult().model_instance
 
     def getBestResult(self):
+        if len(self.getResults()) == 0:
+            return None
+        #else
         return self.getResults().iloc[0]
     
     def getResults(self, buffer=True):
@@ -36,19 +49,33 @@ class AutoRegression:
         #else to get results
         #[algorithm, x_cols, mae, r2, mse, model]
         self.__results = pd.DataFrame(columns=['algorithm', 'features', METRICS_MAE, METRICS_R2, METRICS_MSE, 'model_instance'])
-        
+
+        y_is_cat = self.YisCategorical()
+        y_is_num = not y_is_cat
         for algo in self.algorithms:
             for col_tuple in all_subsets(self.__X_full.columns):
-                if len(col_tuple) == 0:
+                if ((len(col_tuple) == 0) #empty subsets
+                    or (y_is_cat and isinstance(algo, RegressorMixin)) #Y is incompatible with algorithm        
+                    or (y_is_num and isinstance(algo, ClassifierMixin))#Y is incompatible with algorithm
+                    ):
                     continue
-                #col_list = list(col_tuple)
+                #else: all right
                 self.__results.loc[len(self.__results)] = self.__score_dataset(algo, col_tuple)
         
         self.__results.set_index(['algorithm', 'features'])
         self.__results.sort_values(by=METRICS_R2, ascending=False, inplace=True)
                             
         return self.__results           
-        
+    
+    def YisCategorical(self) -> bool:
+        if (isinstance(self.__Y_full.iloc[0,0], float)
+            or (len(self.__Y_full.unique()) > self.__unique_categoric_limit)):
+            return False
+        return True    
+    
+    def YisContinuous(self) -> bool:
+        return not self.YisCategorical()
+                   
     def __score_dataset(self, algorithm, x_cols):
         X = self.__ds_onlynums[list(x_cols)]
         y = self.__Y_full
@@ -86,12 +113,18 @@ class AutoRegression:
 def all_subsets(ss):
     return chain(*map(lambda x: combinations(ss, x), range(0, len(ss)+1)))
 
-from ds_utils import getDSPriceHousing
-autoreg = AutoRegression(getDSPriceHousing(), 'Price')
-                         #, metric_order=METRICS_R2, algorithms = [svm.SVR()])
-model = autoreg.getBestModel()
-print(autoreg.getResults().head())
-print(autoreg.getBestResult())
-print(autoreg.getBestModel())
+from ds_utils import getDSPriceHousing, getDSFuelConsumptionCo2
+autoreg_house = AutoRegression(getDSPriceHousing(), 'Price')
+                        # , metric_order=METRICS_R2, algorithms = [svm.SVC()])
+autoreg_house.addAlgorithm(svm.SVC())
+print(autoreg_house.getResults().head())
+print(autoreg_house.getBestResult())
+print(autoreg_house.getBestModel())
 
-
+#CO2EMISSIONS
+'''
+autoreg_co2 = AutoRegression(getDSFuelConsumptionCo2(), 'CO2EMISSIONS')
+print(autoreg_co2.getResults().head())
+print(autoreg_co2.getBestResult())
+print(autoreg_co2.getBestModel())
+'''
