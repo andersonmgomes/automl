@@ -5,6 +5,11 @@ import numpy as np
 DS_PATH = 'datasets/'
 
 #load dataset
+def getDSFuelConsumptionCo2():
+    return pd.read_csv(DS_PATH + 'FuelConsumptionCo2.csv')
+
+def getDSPriceHousing():
+    return pd.read_csv(DS_PATH + 'USA-priceHousing.csv')
 
 def getDSWine_RED():
     return pd.read_csv(DS_PATH + 'winequality-red.csv', sep=';')
