@@ -1,7 +1,7 @@
 from sklearn.base import ClassifierMixin, RegressorMixin
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error
-from sklearn.metrics import r2_score, mean_squared_error
+from sklearn.metrics import r2_score, mean_squared_error, f1_score
 from sklearn import linear_model
 import numpy as np
 from itertools import chain, combinations
@@ -13,6 +13,7 @@ import pandas as pd
 METRICS_R2 = 'R2'
 METRICS_MAE = 'MAE'
 METRICS_MSE = 'MSE'
+METRICS_F1 = 'F1'
 
 class AutoRegression:
     def __init__(self, ds, y_colname, metric_order=METRICS_R2
@@ -48,7 +49,7 @@ class AutoRegression:
             return self.__results
         #else to get results
         #[algorithm, x_cols, mae, r2, mse, model]
-        self.__results = pd.DataFrame(columns=['algorithm', 'features', METRICS_MAE, METRICS_R2, METRICS_MSE, 'model_instance'])
+        self.__results = pd.DataFrame(columns=['algorithm', 'features', METRICS_F1, METRICS_MAE, METRICS_R2, METRICS_MSE, 'model_instance'])
 
         y_is_cat = self.YisCategorical()
         y_is_num = not y_is_cat
@@ -63,14 +64,26 @@ class AutoRegression:
                 self.__results.loc[len(self.__results)] = self.__score_dataset(algo, col_tuple)
         
         self.__results.set_index(['algorithm', 'features'])
-        self.__results.sort_values(by=METRICS_R2, ascending=False, inplace=True)
+        sortby = METRICS_R2
+        
+        if y_is_cat:
+            sortby = METRICS_F1
+            
+        self.__results.sort_values(by=sortby, ascending=False, inplace=True)
                             
         return self.__results           
     
     def YisCategorical(self) -> bool:
-        if (isinstance(self.__Y_full.iloc[0,0], float)
+        y_type = type(self.__Y_full.iloc[0,0])
+        
+        if (y_type == np.bool_
+            or y_type == np.str_):
+            return True
+        #else
+        if ((y_type == np.float_)
             or (len(self.__Y_full.unique()) > self.__unique_categoric_limit)):
             return False
+        #else
         return True    
     
     def YisContinuous(self) -> bool:
@@ -106,17 +119,32 @@ class AutoRegression:
         mae = mean_absolute_error(y_valid2, preds)
         r2 = r2_score(y_valid2, preds)
         mse = mean_squared_error(y_valid2, preds)
-        
-        return np.array([str(algorithm).replace('()',''), x_cols, mae, r2, mse, model], dtype=object)
+        f1 = None
+        if self.YisCategorical():
+            f1 = f1_score(y_valid2, preds)
+            
+        return np.array([str(algorithm).replace('()',''), x_cols, f1, mae, r2, mse, model], dtype=object)
 
 #util methods
 def all_subsets(ss):
     return chain(*map(lambda x: combinations(ss, x), range(0, len(ss)+1)))
 
 from ds_utils import getDSPriceHousing, getDSFuelConsumptionCo2
-autoreg_house = AutoRegression(getDSPriceHousing(), 'Price')
-                        # , metric_order=METRICS_R2, algorithms = [svm.SVC()])
+
+ds_house = getDSPriceHousing()
+price_75 = ds_house.Price.describe()['75%']
+
+ds_house['high_price'] = ds_house['Price']>price_75
+
+
+ds_house.drop('Price', axis=1, inplace=True)
+
+autoreg_house = AutoRegression(ds_house, 'high_price')
 autoreg_house.addAlgorithm(svm.SVC())
+from sklearn.neighbors import KNeighborsClassifier
+autoreg_house.addAlgorithm(KNeighborsClassifier())
+from sklearn.linear_model import LogisticRegression
+autoreg_house.addAlgorithm(LogisticRegression())
 print(autoreg_house.getResults().head())
 print(autoreg_house.getBestResult())
 print(autoreg_house.getBestModel())
