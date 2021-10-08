@@ -7,6 +7,7 @@ from itertools import chain, combinations
 from sklearn import preprocessing
 from sklearn import svm
 from sklearn import tree
+import pandas as pd
 
 METRICS_R2 = 'R2'
 METRICS_MAE = 'MAE'
@@ -50,22 +51,24 @@ class AutoRegression:
         self.algorithms = algorithms
         
     def getBestModel(self):
-        return self.getResults()[0]
+        return self.getResults().iloc[0]
     
     def getResults(self, buffer=True):
         if buffer and self.__results is not None:
             return self.__results
         #else to get results
-        self.__results = []
+        #[algorithm, x_cols, mae, r2, mse, model]
+        self.__results = pd.DataFrame(columns=['algorithm', 'features', METRICS_MAE, METRICS_R2, METRICS_MSE, 'model_instance'])
         
         for algo in self.algorithms:
             for col_tuple in all_subsets(self.__X_full.columns):
                 if len(col_tuple) == 0:
                     continue
                 col_list = list(col_tuple)
-                self.__results.append(self.__score_dataset(algo, col_list))
+                self.__results.loc[len(self.__results)] = self.__score_dataset(algo, col_list)
         
-        self.__results = sorted(self.__results, key=lambda x: x.order)
+        self.__results.set_index(['algorithm', 'features'])
+        self.__results.sort_values(by=METRICS_R2, ascending=False, inplace=True)
                             
         return self.__results           
         
@@ -100,7 +103,7 @@ class AutoRegression:
         r2 = r2_score(y_valid2, preds)
         mse = mean_squared_error(y_valid2, preds)
         
-        return ModelResult(algorithm, x_cols, (1-r2), model, {METRICS_MAE: mae, METRICS_R2: r2, METRICS_MSE: mse})
+        return [str(algorithm), str(x_cols), mae, r2, mse, model]
 
 #util methods
 def all_subsets(ss):
@@ -111,6 +114,6 @@ from ds_utils import getDSPriceHousing
 autoreg = AutoRegression(getDSPriceHousing(), 'Price')
                          #, metric_order=METRICS_R2, algorithms = [svm.SVR()])
 model = autoreg.getBestModel()
-print(autoreg.getBestModel())
+print(autoreg.getResults().head())
 
 
