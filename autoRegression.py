@@ -13,32 +13,6 @@ METRICS_R2 = 'R2'
 METRICS_MAE = 'MAE'
 METRICS_MSE = 'MSE'
 
-class ModelResult:
-    def __init__(self, algorithm, X_cols, order, model, metrics_detail) -> None:
-        self.algorithm = algorithm
-        self.X_cols = X_cols
-        self.order = order
-        self.model = model
-        self.metrics_detail = metrics_detail
-    
-    def __str__(self):
-        return str(self.algorithm) + ' -> ' + str(self.X_cols) + ' -> ' + str(self.metrics_detail)
-    
-    def __repr__(self):
-        return str(self)
-    
-    def getMetric(self, metric):
-        return self.metrics_detail[metric]
-
-    def getR2(self):
-        return self.getMetric(METRICS_R2)
-
-    def getMAE(self):
-        return self.getMetric(METRICS_MAE)
-
-    def getMSE(self):
-        return self.getMetric(METRICS_MSE)
-
 class AutoRegression:
     def __init__(self, ds, y_colname, metric_order=METRICS_R2
                  , algorithms = [linear_model.LinearRegression(), svm.SVR(), tree.DecisionTreeRegressor()]) -> None:
@@ -64,8 +38,8 @@ class AutoRegression:
             for col_tuple in all_subsets(self.__X_full.columns):
                 if len(col_tuple) == 0:
                     continue
-                col_list = list(col_tuple)
-                self.__results.loc[len(self.__results)] = self.__score_dataset(algo, col_list)
+                #col_list = list(col_tuple)
+                self.__results.loc[len(self.__results)] = self.__score_dataset(algo, col_tuple)
         
         self.__results.set_index(['algorithm', 'features'])
         self.__results.sort_values(by=METRICS_R2, ascending=False, inplace=True)
@@ -73,7 +47,7 @@ class AutoRegression:
         return self.__results           
         
     def __score_dataset(self, algorithm, x_cols):
-        X = self.__ds_onlynums[x_cols]
+        X = self.__ds_onlynums[list(x_cols)]
         y = self.__Y_full
         
         #normalizing the variables
@@ -103,12 +77,11 @@ class AutoRegression:
         r2 = r2_score(y_valid2, preds)
         mse = mean_squared_error(y_valid2, preds)
         
-        return [str(algorithm), str(x_cols), mae, r2, mse, model]
+        return np.array([str(algorithm).replace('()',''), x_cols, mae, r2, mse, model], dtype=object)
 
 #util methods
 def all_subsets(ss):
     return chain(*map(lambda x: combinations(ss, x), range(0, len(ss)+1)))
-
 
 from ds_utils import getDSPriceHousing
 autoreg = AutoRegression(getDSPriceHousing(), 'Price')
