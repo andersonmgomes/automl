@@ -10,6 +10,8 @@ from sklearn import svm
 from sklearn import tree
 from sklearn import neighbors
 import pandas as pd 
+import time
+from memory_profiler import memory_usage
 
 class AutoML:
     def __init__(self, ds, y_colname 
@@ -26,8 +28,7 @@ class AutoML:
         self.__unique_categoric_limit = unique_categoric_limit
         self.METRICS_REGRESSION = ['r2', 'neg_mean_absolute_error', 'neg_mean_squared_error']
         self.METRICS_CLASSIFICATION = ['f1', 'accuracy', 'roc_auc']
-        # metrics reference:
-        # https://scikit-learn.org/stable/modules/model_evaluation.html
+        #metrics reference: https://scikit-learn.org/stable/modules/model_evaluation.html
         
     def addAlgorithm(self, algo):
         self.algorithms.append(algo)
@@ -59,7 +60,7 @@ class AutoML:
             columns_list.extend(self.METRICS_CLASSIFICATION)
         else:
             columns_list.extend(self.METRICS_REGRESSION)
-        columns_list.append('model_instance')
+        columns_list.extend(['model_instance', 'train_time', 'mem_max'])
         
         self.__results = pd.DataFrame(columns=columns_list)
 
@@ -73,7 +74,9 @@ class AutoML:
                     ):
                     continue
                 #else: all right
-                self.__results.loc[len(self.__results)] = self.__score_dataset(algo, col_tuple)
+                t0 = time.perf_counter()
+                mem_max, score_result = memory_usage(proc=(self.__score_dataset, (algo, col_tuple)), include_children=True, max_usage=True, retval=True)
+                self.__results.loc[len(self.__results)] = np.concatenate((score_result, [(time.perf_counter() - t0), mem_max]))
         
         self.__results.set_index(['algorithm', 'features'])
 
@@ -129,7 +132,6 @@ class AutoML:
             y_valid2 = np.asanyarray(y_valid).reshape(-1, 1)
 
         model.fit(X_train2, y_train2.ravel())
-        preds = model.predict(X_valid2)
         
         scoring_list = self.METRICS_REGRESSION
         if self.YisCategorical():
@@ -151,14 +153,15 @@ def all_subsets(ss):
 
 #4 Tests
 #print(sorted(sklearn.metrics.SCORERS.keys()))
-'''
-import ds_utils as ut
-ds_house_class = ut.getDSPriceHousing_ClassProb()
-automl_house_class = AutoML(ds_house_class, 'high_price')
-print(automl_house_class.getResults().head(10))
 
-ds_house_regr = ut.getDSPriceHousing()
-automl_house_regr = AutoML(ds_house_regr, 'Price')
-print(automl_house_regr.getResults().head(10))
-'''
+import ds_utils as ut
+if __name__ == '__main__':
+    ds_house_class = ut.getDSPriceHousing_ClassProb()
+    automl_house_class = AutoML(ds_house_class, 'high_price')
+    print(automl_house_class.getResults().head(10))
+
+    ds_house_regr = ut.getDSPriceHousing()
+    automl_house_regr = AutoML(ds_house_regr, 'Price')
+    print(automl_house_regr.getResults().head(10))
+
 
