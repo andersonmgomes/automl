@@ -11,6 +11,14 @@ def getDSFuelConsumptionCo2():
 def getDSPriceHousing():
     return pd.read_csv(DS_PATH + 'USA-priceHousing.csv')
 
+#classification problem
+def getDSPriceHousing_ClassProb():
+    ds_house_classprob = getDSPriceHousing()
+    price_75 = ds_house_classprob.Price.describe()['75%']
+    ds_house_classprob['high_price'] = ds_house_classprob['Price']>price_75
+    ds_house_classprob.drop('Price', axis=1, inplace=True)
+    return ds_house_classprob
+
 def getDSWine_RED():
     return pd.read_csv(DS_PATH + 'winequality-red.csv', sep=';')
 

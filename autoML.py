@@ -16,7 +16,7 @@ METRICS_MSE = 'MSE'
 METRICS_F1 = 'F1'
 
 class AutoML:
-    def __init__(self, ds, y_colname, metric_order=METRICS_R2
+    def __init__(self, ds, y_colname 
                  , algorithms = [linear_model.LinearRegression(), svm.SVR(), tree.DecisionTreeRegressor()]
                  , unique_categoric_limit = 15) -> None:
         self.__unique_categoric_limit = unique_categoric_limit
@@ -25,7 +25,6 @@ class AutoML:
         self.__X_full = self.__ds_onlynums.drop(columns=[y_colname])
         self.__Y_full = self.__ds_onlynums[[y_colname]]
         self.__results = None
-        self.metric_order = metric_order
         self.algorithms = algorithms
         
     def addAlgorithm(self, algo):
@@ -129,34 +128,12 @@ class AutoML:
 def all_subsets(ss):
     return chain(*map(lambda x: combinations(ss, x), range(0, len(ss)+1)))
 
-
-'''4 Testes
-from ds_utils import getDSPriceHousing, getDSFuelConsumptionCo2
-
-ds_house = getDSPriceHousing()
-price_75 = ds_house.Price.describe()['75%']
-
-ds_house['high_price'] = ds_house['Price']>price_75
-
-
-ds_house.drop('Price', axis=1, inplace=True)
-
-autoreg_house = AutoRegression(ds_house, 'high_price')
-autoreg_house.addAlgorithm(svm.SVC())
-from sklearn.neighbors import KNeighborsClassifier
-autoreg_house.addAlgorithm(KNeighborsClassifier())
-from sklearn.linear_model import LogisticRegression
-autoreg_house.addAlgorithm(LogisticRegression())
-from sklearn import tree
-autoreg_house.addAlgorithm(tree.DecisionTreeClassifier())
-autoreg_house.addAlgorithm(tree.DecisionTreeRegressor())
-print(autoreg_house.getResults().head())
-print(autoreg_house.getBestResult())
-print(autoreg_house.getBestModel())
-
-#CO2EMISSIONS
-autoreg_co2 = AutoRegression(getDSFuelConsumptionCo2(), 'CO2EMISSIONS')
-print(autoreg_co2.getResults().head())
-print(autoreg_co2.getBestResult())
-print(autoreg_co2.getBestModel())
+'''4 Tests
+import ds_utils as ut
+ds_hhprice = ut.getDSPriceHousing_ClassProb()
+from sklearn import svm
+algorithms = [svm.SVC()]
+automl_house = AutoML(ds_hhprice, 'high_price', algorithms=algorithms)
+print(automl_house.getResults())
 '''
+
