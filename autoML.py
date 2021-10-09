@@ -15,7 +15,7 @@ METRICS_MAE = 'MAE'
 METRICS_MSE = 'MSE'
 METRICS_F1 = 'F1'
 
-class AutoRegression:
+class AutoML:
     def __init__(self, ds, y_colname, metric_order=METRICS_R2
                  , algorithms = [linear_model.LinearRegression(), svm.SVR(), tree.DecisionTreeRegressor()]
                  , unique_categoric_limit = 15) -> None:
