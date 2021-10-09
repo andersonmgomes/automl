@@ -129,6 +129,8 @@ class AutoRegression:
 def all_subsets(ss):
     return chain(*map(lambda x: combinations(ss, x), range(0, len(ss)+1)))
 
+
+'''4 Testes
 from ds_utils import getDSPriceHousing, getDSFuelConsumptionCo2
 
 ds_house = getDSPriceHousing()
@@ -145,12 +147,14 @@ from sklearn.neighbors import KNeighborsClassifier
 autoreg_house.addAlgorithm(KNeighborsClassifier())
 from sklearn.linear_model import LogisticRegression
 autoreg_house.addAlgorithm(LogisticRegression())
+from sklearn import tree
+autoreg_house.addAlgorithm(tree.DecisionTreeClassifier())
+autoreg_house.addAlgorithm(tree.DecisionTreeRegressor())
 print(autoreg_house.getResults().head())
 print(autoreg_house.getBestResult())
 print(autoreg_house.getBestModel())
 
 #CO2EMISSIONS
-'''
 autoreg_co2 = AutoRegression(getDSFuelConsumptionCo2(), 'CO2EMISSIONS')
 print(autoreg_co2.getResults().head())
 print(autoreg_co2.getBestResult())
