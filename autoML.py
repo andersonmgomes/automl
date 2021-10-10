@@ -139,7 +139,8 @@ class AutoML:
                 #else: all right
                 #print('cols:' + str(col_tuple) + '...')
                 t0 = time.perf_counter()
-                mem_max, score_result = memory_usage(proc=(self.__score_dataset, (algo, col_tuple)), max_usage=True, retval=True)
+                mem_max, score_result = memory_usage(proc=(self.__score_dataset, (algo, col_tuple)), max_usage=True
+                                                     , retval=True, include_children=True)
                 self.__results.loc[len(self.__results)] = np.concatenate((np.array([algo_id, col_tuple
                                                                                     , int(len(col_tuple))
                                                                                     , (time.perf_counter() - t0)
