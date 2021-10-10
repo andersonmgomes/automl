@@ -22,7 +22,7 @@ class AutoML:
         self.__ds_full = ds
         self.y_colname = y_colname
         self.__ds_onlynums = self.__ds_full.select_dtypes(exclude=['object'])
-        self.__X_full = self.__ds_onlynums.drop(columns=[y_colname])
+        #self.__X_full = self.__ds_onlynums.drop(columns=[y_colname])
         self.__Y_full = self.__ds_onlynums[[y_colname]]
         self.__results = None
         self.algorithms = algorithms
@@ -30,7 +30,8 @@ class AutoML:
         self.METRICS_REGRESSION = ['r2', 'neg_mean_absolute_error', 'neg_mean_squared_error']
         self.METRICS_CLASSIFICATION = ['f1', 'accuracy', 'roc_auc']
         #metrics reference: https://scikit-learn.org/stable/modules/model_evaluation.html
-        self.MIN_X_Y_CORRELATION_RATE = 0.05 #TODO: define this value dynamically
+        self.MIN_X_Y_CORRELATION_RATE = 0.05 #TODO: #1 MIN_X_Y_CORRELATION_RATE: define this value dynamically
+        self.N_FEATURES_THRESHOLD = 0.5 #TODO: N_FEATURES_THRESHOLD: define this value dynamically
         
     def addAlgorithm(self, algo):
         self.algorithms.append(algo)
@@ -56,13 +57,13 @@ class AutoML:
             return self.__results.drop('model_instance', axis=1)
                    
         #else to get results
-        #dataframe format: [algorithm, x_cols,[metrics], model_instance]
-        columns_list = ['algorithm', 'features']
+        #dataframe format: [algorithm, features, n_features, train_time, mem_max, [specific metrics], model_instance]
+        columns_list = ['algorithm', 'features', 'n_features', 'train_time', 'mem_max']
         if self.YisCategorical():
             columns_list.extend(self.METRICS_CLASSIFICATION)
         else:
             columns_list.extend(self.METRICS_REGRESSION)
-        columns_list.extend(['model_instance', 'train_time', 'mem_max'])
+        columns_list.extend(['model_instance'])
         
         self.__results = pd.DataFrame(columns=columns_list)
         del(columns_list)
@@ -94,7 +95,6 @@ class AutoML:
                 considered_features.append(features_candidates[i])
             
         subsets = all_subsets(considered_features)
-        del(considered_features)
         del(features_corr)
         del(features_candidates)
         
@@ -104,15 +104,22 @@ class AutoML:
             ):
                 continue
             #else: all right
-            print('*** Testing algo ' + str(algo) + '...')
+            algo_id = str(algo).replace('()','')
+            print('*** Testing algo ' + algo_id + '...')
             for col_tuple in subsets:
-                if (len(col_tuple) == 0): #empty subsets
+                if ((len(col_tuple) == 0)#empty subsets
+                    or ((len(col_tuple)/len(considered_features)) < self.N_FEATURES_THRESHOLD)
+                    ): 
                     continue
                 #else: all right
-                print('cols:' + str(col_tuple) + '...')
+                #print('cols:' + str(col_tuple) + '...')
                 t0 = time.perf_counter()
                 mem_max, score_result = memory_usage(proc=(self.__score_dataset, (algo, col_tuple)), max_usage=True, retval=True)
-                self.__results.loc[len(self.__results)] = np.concatenate((score_result, [(time.perf_counter() - t0), mem_max]))
+                self.__results.loc[len(self.__results)] = np.concatenate((np.array([algo_id, col_tuple
+                                                                                    , int(len(col_tuple))
+                                                                                    , (time.perf_counter() - t0)
+                                                                                    , mem_max], dtype=object)
+                                                                        , score_result))
         
         self.__results.set_index(['algorithm', 'features'])
 
@@ -178,32 +185,34 @@ class AutoML:
         for scor in scoring_list:
             metrics_value_list.append(np.mean(cross_val_score(model, X_valid2, y_valid2.ravel(), cv=5, scoring=scor)))
         
-        result_list =  [str(algorithm).replace('()',''), x_cols]
-        result_list.extend(metrics_value_list)
+        result_list = metrics_value_list
         result_list.append(model)       
         return np.array(result_list, dtype=object)
 
 #util methods
 def all_subsets(ss):
-    return chain(*map(lambda x: combinations(ss, x), range(0, len(ss)+1)))
+    return list(chain(*map(lambda x: combinations(ss, x), range(0, len(ss)+1))))
 
 #4 Tests
-#print(sorted(sklearn.metrics.SCORERS.keys()))
-
+'''
 import ds_utils as ut
 
 def testAutoML(ds, y_colname):
     automl = AutoML(ds, y_colname)
-    print(automl.getResults().head(10))
+    automl.N_FEATURES_THRESHOLD = 0.8
+    automl.MIN_X_Y_CORRELATION_RATE = 0.25
+    df4print = automl.getResults()#.drop('features', axis=1)
+    print(df4print.head())
+    print(automl.getBestResult())
+    print(automl.getBestResult()['features'])
     del(automl)
-    
 
 if __name__ == '__main__':
-    pd.options.display.width = 0
-    pd.options.display.max_rows = 0
+    #pd.options.display.width = 0
+    #pd.options.display.max_rows = 0
     
     testAutoML(ut.getDSFuelConsumptionCo2(), 'CO2EMISSIONS')
     testAutoML(ut.getDSPriceHousing_ClassProb(), 'high_price')
     testAutoML(ut.getDSPriceHousing(), 'Price')
-
+'''
 
