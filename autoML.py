@@ -12,6 +12,7 @@ from sklearn import neighbors
 import pandas as pd 
 import time
 from memory_profiler import memory_usage
+from sklearn.metrics import confusion_matrix
 
 class AutoML:
     def __init__(self, ds, y_colname 
@@ -37,12 +38,6 @@ class AutoML:
         self.__n_features_threshold = n_features_threshold #TODO: N_FEATURES_THRESHOLD: define this value dynamically
         self.__RANDOM_STATE = 1102
         
-    def getConfusionMatrix(self, classification_result_row):
-        if self.YisContinuous:
-            return None
-        #else
-        pass        
-    
     def clearResults(self):
         self.__results = None #cleaning the previous results
         
@@ -86,9 +81,10 @@ class AutoML:
         columns_list = ['algorithm', 'features', 'n_features', 'train_time', 'mem_max']
         if self.YisCategorical():
             columns_list.extend(self.__metrics_classification_list)
+            columns_list.append('confusion_matrix')
         else:
             columns_list.extend(self.__metrics_regression_list)
-        columns_list.extend(['model_instance'])
+        columns_list.append('model_instance')
         
         self.__results = pd.DataFrame(columns=columns_list)
         del(columns_list)
@@ -147,13 +143,15 @@ class AutoML:
                                                                                     , mem_max], dtype=object)
                                                                         , score_result))
         
-        self.__results.set_index(['algorithm', 'features'], inplace=True)
+        #TODO: #2 implements multindex
+        #self.__results.set_index(['algorithm', 'features'], inplace=True) 
 
         sortby = self.__metrics_regression_list[0] #considering the first element the most important
         if y_is_cat:
             sortby = self.__metrics_classification_list[0] #considering the first element the most important
             
         self.__results.sort_values(by=sortby, ascending=False, inplace=True)
+        self.__results.reset_index(inplace=True)        
         
         if resultWithModel:                   
             return self.__results
@@ -176,19 +174,19 @@ class AutoML:
     def YisContinuous(self) -> bool:
         return not self.YisCategorical()
                    
-    def __score_dataset(self, algorithm, x_cols):
+    def __train_test_split(self, x_cols):
         X = self.__ds_onlynums[list(x_cols)]
         y = self.__Y_full
-        
         #normalizing the variables
         min_max_scaler = preprocessing.MinMaxScaler()
         X_normal = min_max_scaler.fit_transform(X)
         y_normal = min_max_scaler.fit_transform(y)
+        return train_test_split(X_normal, y_normal, train_size=0.8, test_size=0.2, random_state=self.__RANDOM_STATE)
         
-        X_train, X_valid, y_train, y_valid = train_test_split(X_normal, y_normal, train_size=0.8, test_size=0.2, random_state=self.__RANDOM_STATE)
+    def __score_dataset(self, model, x_cols):
         
-        model = algorithm
-
+        X_train, X_valid, y_train, y_valid = self.__train_test_split(x_cols)
+        
         X_train2 = X_train
         X_valid2 = X_valid
         y_train2 = y_train
@@ -212,33 +210,15 @@ class AutoML:
             metrics_value_list.append(np.mean(cross_val_score(model, X_valid2, y_valid2.ravel(), cv=5, scoring=scor)))
         
         result_list = metrics_value_list
+
+        if self.YisCategorical():
+            #confusion matrix
+            result_list.append(confusion_matrix(y_valid2, model.predict(X_valid2)))
+
+        #model
         result_list.append(model)       
         return np.array(result_list, dtype=object)
 
 #util methods
 def all_subsets(ss):
     return list(chain(*map(lambda x: combinations(ss, x), range(0, len(ss)+1))))
-
-#4 Tests
-'''
-import ds_utils as ut
-
-def testAutoML(ds, y_colname):
-    automl = AutoML(ds, y_colname)
-    automl.N_FEATURES_THRESHOLD = 0.8
-    automl.MIN_X_Y_CORRELATION_RATE = 0.25
-    df4print = automl.getResults()#.drop('features', axis=1)
-    print(df4print.head())
-    print(automl.getBestResult())
-    print(automl.getBestResult()['features'])
-    del(automl)
-
-if __name__ == '__main__':
-    #pd.options.display.width = 0
-    #pd.options.display.max_rows = 0
-    
-    testAutoML(ut.getDSFuelConsumptionCo2(), 'CO2EMISSIONS')
-    testAutoML(ut.getDSPriceHousing_ClassProb(), 'high_price')
-    testAutoML(ut.getDSPriceHousing(), 'Price')
-'''
-
