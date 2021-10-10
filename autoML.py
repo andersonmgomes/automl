@@ -65,7 +65,8 @@ class AutoML:
         columns_list.extend(['model_instance', 'train_time', 'mem_max'])
         
         self.__results = pd.DataFrame(columns=columns_list)
-
+        del(columns_list)
+        
         y_is_cat = self.YisCategorical()
         y_is_num = not y_is_cat
         
@@ -93,6 +94,10 @@ class AutoML:
                 considered_features.append(features_candidates[i])
             
         subsets = all_subsets(considered_features)
+        del(considered_features)
+        del(features_corr)
+        del(features_candidates)
+        
         for algo in self.algorithms:
             if  ((y_is_cat and isinstance(algo, RegressorMixin)) #Y is incompatible with algorithm        
                  or (y_is_num and isinstance(algo, ClassifierMixin))#Y is incompatible with algorithm
@@ -106,7 +111,7 @@ class AutoML:
                 #else: all right
                 print('cols:' + str(col_tuple) + '...')
                 t0 = time.perf_counter()
-                mem_max, score_result = memory_usage(proc=(self.__score_dataset, (algo, col_tuple)), include_children=True, max_usage=True, retval=True)
+                mem_max, score_result = memory_usage(proc=(self.__score_dataset, (algo, col_tuple)), max_usage=True, retval=True)
                 self.__results.loc[len(self.__results)] = np.concatenate((score_result, [(time.perf_counter() - t0), mem_max]))
         
         self.__results.set_index(['algorithm', 'features'])
@@ -186,19 +191,19 @@ def all_subsets(ss):
 #print(sorted(sklearn.metrics.SCORERS.keys()))
 
 import ds_utils as ut
+
+def testAutoML(ds, y_colname):
+    automl = AutoML(ds, y_colname)
+    print(automl.getResults().head(10))
+    del(automl)
+    
+
 if __name__ == '__main__':
     pd.options.display.width = 0
     pd.options.display.max_rows = 0
-    ds_co2_regr = ut.getDSFuelConsumptionCo2()
-    automl_co2_regr = AutoML(ds_co2_regr, 'CO2EMISSIONS')
-    print(automl_co2_regr.getResults().head(100))
-
-    ds_house_class = ut.getDSPriceHousing_ClassProb()
-    automl_house_class = AutoML(ds_house_class, 'high_price')
-    print(automl_house_class.getResults().head(10))
-
-    ds_house_regr = ut.getDSPriceHousing()
-    automl_house_regr = AutoML(ds_house_regr, 'Price')
-    print(automl_house_regr.getResults().head(10))
+    
+    testAutoML(ut.getDSFuelConsumptionCo2(), 'CO2EMISSIONS')
+    testAutoML(ut.getDSPriceHousing_ClassProb(), 'high_price')
+    testAutoML(ut.getDSPriceHousing(), 'Price')
 
 
