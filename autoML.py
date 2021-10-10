@@ -2,7 +2,7 @@ from numpy.lib.function_base import append
 from sklearn.base import ClassifierMixin, RegressorMixin
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import cross_val_score
-from sklearn import linear_model
+from sklearn import linear_model, utils
 import numpy as np
 from itertools import chain, combinations
 from sklearn import preprocessing
@@ -13,6 +13,7 @@ import pandas as pd
 import time
 from memory_profiler import memory_usage
 from sklearn.metrics import confusion_matrix
+import seaborn as sns
 
 class AutoML:
     def __init__(self, ds, y_colname 
@@ -63,6 +64,9 @@ class AutoML:
         #else
         return self.getBestResult(True).model_instance
 
+    def getBestConfusionMatrix(self):
+        getConfusionMatrixHeatMap(self.getBestResult().confusion_matrix)
+                
     def getBestResult(self, resultWithModel=False):
         if len(self.getResults(resultWithModel)) == 0:
             return None
@@ -222,3 +226,11 @@ class AutoML:
 #util methods
 def all_subsets(ss):
     return list(chain(*map(lambda x: combinations(ss, x), range(0, len(ss)+1))))
+
+from cf_matrix import make_confusion_matrix
+
+def getConfusionMatrixHeatMap(cf_matrix):
+    group_names = ['True Neg','False Pos','False Neg','True Pos']
+    categories = ['Zero', 'One']
+    return make_confusion_matrix(cf_matrix, group_names=group_names, categories=categories, cmap='Blues', title='CF Matrix');    
+
