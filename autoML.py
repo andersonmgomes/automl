@@ -18,7 +18,10 @@ class AutoML:
                  , algorithms = [linear_model.LinearRegression(), svm.SVR(), tree.DecisionTreeRegressor()
                                  , neighbors.KNeighborsRegressor(), linear_model.LogisticRegression()
                                  , svm.SVC(), neighbors.KNeighborsClassifier(), tree.DecisionTreeClassifier()]
-                 , unique_categoric_limit = 15) -> None:
+                 , unique_categoric_limit = 15
+                 , min_x_y_correlation_rate = 0.05
+                 , n_features_threshold = 0.5
+                 ) -> None:
         self.__ds_full = ds
         self.y_colname = y_colname
         self.__ds_onlynums = self.__ds_full.select_dtypes(exclude=['object'])
@@ -27,15 +30,30 @@ class AutoML:
         self.__results = None
         self.algorithms = algorithms
         self.__unique_categoric_limit = unique_categoric_limit
-        self.METRICS_REGRESSION = ['r2', 'neg_mean_absolute_error', 'neg_mean_squared_error']
-        self.METRICS_CLASSIFICATION = ['f1', 'accuracy', 'roc_auc']
+        self.__metrics_regression_list = ['r2', 'neg_mean_absolute_error', 'neg_mean_squared_error']
+        self.__metrics_classification_list = ['f1', 'accuracy', 'roc_auc']
         #metrics reference: https://scikit-learn.org/stable/modules/model_evaluation.html
-        self.MIN_X_Y_CORRELATION_RATE = 0.05 #TODO: #1 MIN_X_Y_CORRELATION_RATE: define this value dynamically
-        self.N_FEATURES_THRESHOLD = 0.5 #TODO: N_FEATURES_THRESHOLD: define this value dynamically
+        self.__min_x_y_correlation_rate = min_x_y_correlation_rate #TODO: #1 MIN_X_Y_CORRELATION_RATE: define this value dynamically
+        self.__n_features_threshold = n_features_threshold #TODO: N_FEATURES_THRESHOLD: define this value dynamically
         
-    def addAlgorithm(self, algo):
-        self.algorithms.append(algo)
+    def clearResults(self):
         self.__results = None #cleaning the previous results
+        
+    def processAllFeatureCombinations(self):
+        self.setNFeaturesThreshold(0)
+        
+    def setNFeaturesThreshold(self, threshold):
+        self.__n_features_threshold = threshold
+        self.clearResults()
+
+    def setMinXYcorrRate(self, rate):
+        self.__min_x_y_correlation_rate = rate
+        self.clearResults()
+        
+    def setAlgorithm(self, algo):
+        self.algorithms.clear()
+        self.algorithms.append(algo)
+        self.clearResults()
     
     def getBestModel(self):
         if self.getBestResult(True) is None:
@@ -60,9 +78,9 @@ class AutoML:
         #dataframe format: [algorithm, features, n_features, train_time, mem_max, [specific metrics], model_instance]
         columns_list = ['algorithm', 'features', 'n_features', 'train_time', 'mem_max']
         if self.YisCategorical():
-            columns_list.extend(self.METRICS_CLASSIFICATION)
+            columns_list.extend(self.__metrics_classification_list)
         else:
-            columns_list.extend(self.METRICS_REGRESSION)
+            columns_list.extend(self.__metrics_regression_list)
         columns_list.extend(['model_instance'])
         
         self.__results = pd.DataFrame(columns=columns_list)
@@ -77,7 +95,7 @@ class AutoML:
         features_candidates = []
         #testing min correlation rate with Y
         for feat_name,corr_value in features_corr[self.y_colname].items():
-            if ((abs(corr_value) > self.MIN_X_Y_CORRELATION_RATE)
+            if ((abs(corr_value) > self.__min_x_y_correlation_rate)
                 and (feat_name != self.y_colname)):
                 features_candidates.append(feat_name)
         
@@ -88,7 +106,7 @@ class AutoML:
         for i in range(0, len(features_candidates)):
             no_redudance = True
             for j in range(i+1, len(features_candidates)):
-                if ((abs(features_corr.iloc[i][j]) > (1-self.MIN_X_Y_CORRELATION_RATE))):
+                if ((abs(features_corr.iloc[i][j]) > (1-self.__min_x_y_correlation_rate))):
                     no_redudance = False
                     break
             if no_redudance:
@@ -105,10 +123,10 @@ class AutoML:
                 continue
             #else: all right
             algo_id = str(algo).replace('()','')
-            print('*** Testing algo ' + algo_id + '...')
+            #print('*** Testing algo ' + algo_id + '...')
             for col_tuple in subsets:
                 if ((len(col_tuple) == 0)#empty subsets
-                    or ((len(col_tuple)/len(considered_features)) < self.N_FEATURES_THRESHOLD)
+                    or ((len(col_tuple)/len(considered_features)) < self.__n_features_threshold)
                     ): 
                     continue
                 #else: all right
@@ -123,9 +141,9 @@ class AutoML:
         
         self.__results.set_index(['algorithm', 'features'])
 
-        sortby = self.METRICS_REGRESSION[0] #considering the first element the most important
+        sortby = self.__metrics_regression_list[0] #considering the first element the most important
         if y_is_cat:
-            sortby = self.METRICS_CLASSIFICATION[0] #considering the first element the most important
+            sortby = self.__metrics_classification_list[0] #considering the first element the most important
             
         self.__results.sort_values(by=sortby, ascending=False, inplace=True)
         
@@ -176,9 +194,9 @@ class AutoML:
 
         model.fit(X_train2, y_train2.ravel())
         
-        scoring_list = self.METRICS_REGRESSION
+        scoring_list = self.__metrics_regression_list
         if self.YisCategorical():
-            scoring_list = self.METRICS_CLASSIFICATION
+            scoring_list = self.__metrics_classification_list
         
         metrics_value_list = []
         
