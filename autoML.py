@@ -35,7 +35,14 @@ class AutoML:
         #metrics reference: https://scikit-learn.org/stable/modules/model_evaluation.html
         self.__min_x_y_correlation_rate = min_x_y_correlation_rate #TODO: #1 MIN_X_Y_CORRELATION_RATE: define this value dynamically
         self.__n_features_threshold = n_features_threshold #TODO: N_FEATURES_THRESHOLD: define this value dynamically
+        self.__RANDOM_STATE = 1102
         
+    def getConfusionMatrix(self, classification_result_row):
+        if self.YisContinuous:
+            return None
+        #else
+        pass        
+    
     def clearResults(self):
         self.__results = None #cleaning the previous results
         
@@ -139,7 +146,7 @@ class AutoML:
                                                                                     , mem_max], dtype=object)
                                                                         , score_result))
         
-        self.__results.set_index(['algorithm', 'features'])
+        self.__results.set_index(['algorithm', 'features'], inplace=True)
 
         sortby = self.__metrics_regression_list[0] #considering the first element the most important
         if y_is_cat:
@@ -177,7 +184,7 @@ class AutoML:
         X_normal = min_max_scaler.fit_transform(X)
         y_normal = min_max_scaler.fit_transform(y)
         
-        X_train, X_valid, y_train, y_valid = train_test_split(X_normal, y_normal, train_size=0.8, test_size=0.2, random_state=1102)
+        X_train, X_valid, y_train, y_valid = train_test_split(X_normal, y_normal, train_size=0.8, test_size=0.2, random_state=self.__RANDOM_STATE)
         
         model = algorithm
 
