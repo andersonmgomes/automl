@@ -1,4 +1,4 @@
-import sklearn
+from numpy.lib.function_base import append
 from sklearn.base import ClassifierMixin, RegressorMixin
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import cross_val_score
@@ -20,6 +20,7 @@ class AutoML:
                                  , svm.SVC(), neighbors.KNeighborsClassifier(), tree.DecisionTreeClassifier()]
                  , unique_categoric_limit = 15) -> None:
         self.__ds_full = ds
+        self.y_colname = y_colname
         self.__ds_onlynums = self.__ds_full.select_dtypes(exclude=['object'])
         self.__X_full = self.__ds_onlynums.drop(columns=[y_colname])
         self.__Y_full = self.__ds_onlynums[[y_colname]]
@@ -29,6 +30,7 @@ class AutoML:
         self.METRICS_REGRESSION = ['r2', 'neg_mean_absolute_error', 'neg_mean_squared_error']
         self.METRICS_CLASSIFICATION = ['f1', 'accuracy', 'roc_auc']
         #metrics reference: https://scikit-learn.org/stable/modules/model_evaluation.html
+        self.MIN_X_Y_CORRELATION_RATE = 0.05 #TODO: define this value dynamically
         
     def addAlgorithm(self, algo):
         self.algorithms.append(algo)
@@ -66,14 +68,43 @@ class AutoML:
 
         y_is_cat = self.YisCategorical()
         y_is_num = not y_is_cat
+        
+        #features engineering
+        features_corr = self.__ds_onlynums.corr()
+        #print(features_corr)
+        features_candidates = []
+        #testing min correlation rate with Y
+        for feat_name,corr_value in features_corr[self.y_colname].items():
+            if ((abs(corr_value) > self.MIN_X_Y_CORRELATION_RATE)
+                and (feat_name != self.y_colname)):
+                features_candidates.append(feat_name)
+        
+        considered_features = []
+        features_corr = self.__ds_onlynums[features_candidates].corr()
+        #print(features_corr)
+        #testing redudance between features
+        for i in range(0, len(features_candidates)):
+            no_redudance = True
+            for j in range(i+1, len(features_candidates)):
+                if ((abs(features_corr.iloc[i][j]) > (1-self.MIN_X_Y_CORRELATION_RATE))):
+                    no_redudance = False
+                    break
+            if no_redudance:
+                considered_features.append(features_candidates[i])
+            
+        subsets = all_subsets(considered_features)
         for algo in self.algorithms:
-            for col_tuple in all_subsets(self.__X_full.columns):
-                if ((len(col_tuple) == 0) #empty subsets
-                    or (y_is_cat and isinstance(algo, RegressorMixin)) #Y is incompatible with algorithm        
-                    or (y_is_num and isinstance(algo, ClassifierMixin))#Y is incompatible with algorithm
-                    ):
+            if  ((y_is_cat and isinstance(algo, RegressorMixin)) #Y is incompatible with algorithm        
+                 or (y_is_num and isinstance(algo, ClassifierMixin))#Y is incompatible with algorithm
+            ):
+                continue
+            #else: all right
+            print('*** Testing algo ' + str(algo) + '...')
+            for col_tuple in subsets:
+                if (len(col_tuple) == 0): #empty subsets
                     continue
                 #else: all right
+                print('cols:' + str(col_tuple) + '...')
                 t0 = time.perf_counter()
                 mem_max, score_result = memory_usage(proc=(self.__score_dataset, (algo, col_tuple)), include_children=True, max_usage=True, retval=True)
                 self.__results.loc[len(self.__results)] = np.concatenate((score_result, [(time.perf_counter() - t0), mem_max]))
@@ -99,7 +130,7 @@ class AutoML:
             return True
         #else
         if ((y_type == np.float_)
-            or (len(self.__Y_full.unique()) > self.__unique_categoric_limit)):
+            or (len(self.__Y_full[self.y_colname].unique()) > self.__unique_categoric_limit)):
             return False
         #else
         return True    
@@ -156,6 +187,12 @@ def all_subsets(ss):
 
 import ds_utils as ut
 if __name__ == '__main__':
+    pd.options.display.width = 0
+    pd.options.display.max_rows = 0
+    ds_co2_regr = ut.getDSFuelConsumptionCo2()
+    automl_co2_regr = AutoML(ds_co2_regr, 'CO2EMISSIONS')
+    print(automl_co2_regr.getResults().head(100))
+
     ds_house_class = ut.getDSPriceHousing_ClassProb()
     automl_house_class = AutoML(ds_house_class, 'high_price')
     print(automl_house_class.getResults().head(10))
