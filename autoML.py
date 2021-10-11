@@ -65,7 +65,9 @@ class AutoML:
         return self.getBestResult(True).model_instance
 
     def getBestConfusionMatrix(self):
-        getConfusionMatrixHeatMap(self.getBestResult().confusion_matrix)
+        getConfusionMatrixHeatMap(self.getBestResult().confusion_matrix
+                                  , title=(str(self.getBestResult().algorithm)
+                                           + ' (' + str(self.getBestResult().n_features) +' features)'))
                 
     def getBestResult(self, resultWithModel=False):
         if len(self.getResults(resultWithModel)) == 0:
@@ -229,8 +231,8 @@ def all_subsets(ss):
 
 from cf_matrix import make_confusion_matrix
 
-def getConfusionMatrixHeatMap(cf_matrix):
+def getConfusionMatrixHeatMap(cf_matrix, title='CF Matrix'):
     group_names = ['True Neg','False Pos','False Neg','True Pos']
     categories = ['Zero', 'One']
-    return make_confusion_matrix(cf_matrix, group_names=group_names, categories=categories, cmap='Blues', title='CF Matrix');    
+    return make_confusion_matrix(cf_matrix, group_names=group_names, categories=categories, cmap='Blues', title=title);    
 
