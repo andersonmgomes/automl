@@ -155,7 +155,7 @@ class AutoML:
             sortby = self.__metrics_classification_list[0] #considering the first element the most important
             
         self.__results.sort_values(by=sortby, ascending=False, inplace=True)
-        self.__results.reset_index(inplace=True)        
+        self.__results.reset_index(inplace=True, drop=True)        
         
         if resultWithModel:                   
             return self.__results
