@@ -20,7 +20,7 @@ class AutoML:
                  , algorithms = [linear_model.LinearRegression(), svm.SVR(), tree.DecisionTreeRegressor()
                                  , neighbors.KNeighborsRegressor(), linear_model.LogisticRegression()
                                  , svm.SVC(), neighbors.KNeighborsClassifier(), tree.DecisionTreeClassifier()]
-                 , unique_categoric_limit = 15
+                 , unique_categoric_limit = 2 #TODO: implements multclasses classifier
                  , min_x_y_correlation_rate = 0.05
                  , n_features_threshold = 0.5
                  ) -> None:
