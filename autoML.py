@@ -16,7 +16,7 @@ from sklearn.metrics import confusion_matrix
 import seaborn as sns
 
 class AutoML:
-    def __init__(self, ds, y_colname 
+    def __init__(self, ds, y_colname = 'y'
                  , algorithms = [linear_model.LinearRegression(), svm.SVR(), tree.DecisionTreeRegressor()
                                  , neighbors.KNeighborsRegressor(), linear_model.LogisticRegression()
                                  , svm.SVC(), neighbors.KNeighborsClassifier(), tree.DecisionTreeClassifier()]
