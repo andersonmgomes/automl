@@ -13,22 +13,19 @@ import pandas as pd
 import time
 from memory_profiler import memory_usage
 from sklearn.metrics import confusion_matrix
-import seaborn as sns
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import OrdinalEncoder
 
 class AutoML:
     def __init__(self, ds, y_colname = 'y'
                  , algorithms = [linear_model.LinearRegression(), svm.SVR(), tree.DecisionTreeRegressor()
                                  , neighbors.KNeighborsRegressor(), linear_model.LogisticRegression()
-                                 , svm.SVC(), neighbors.KNeighborsClassifier(), tree.DecisionTreeClassifier()]
-                 , unique_categoric_limit = 2 #TODO: implements multclasses classifier
+                                 , svm.SVC(probability=True), neighbors.KNeighborsClassifier(), tree.DecisionTreeClassifier()]
+                 , unique_categoric_limit = 10 
                  , min_x_y_correlation_rate = 0.3
                  , n_features_threshold = 0.85
                  ) -> None:
-        self.__ds_full = ds
-        self.y_colname = y_colname
-        self.__ds_onlynums = self.__ds_full.select_dtypes(exclude=['object'])
-        #self.__X_full = self.__ds_onlynums.drop(columns=[y_colname])
-        self.__Y_full = self.__ds_onlynums[[y_colname]]
+        #initializing variables
         self.__results = None
         self.algorithms = algorithms
         self.__unique_categoric_limit = unique_categoric_limit
@@ -38,6 +35,61 @@ class AutoML:
         self.__min_x_y_correlation_rate = min_x_y_correlation_rate #TODO: #1 MIN_X_Y_CORRELATION_RATE: define this value dynamically
         self.__n_features_threshold = n_features_threshold #TODO: N_FEATURES_THRESHOLD: define this value dynamically
         self.__RANDOM_STATE = 1102
+        
+        #setting Y
+        self.y_colname = y_colname
+        self.__y_full = ds[[self.y_colname]]
+        self.__y_encoder = None
+        if self.YisCategorical():
+            #encoding
+            self.__y_encoder = OrdinalEncoder(dtype=np.int)
+            self.__y_full = pd.DataFrame(self.__y_encoder.fit_transform(self.__y_full), columns=[self.y_colname])
+            if len(self.__y_full[self.y_colname].unique()) > 2: #multclass 
+                #adjusting the F1 score and ROC_AUC for multclass target
+                for i, m in enumerate(self.__metrics_classification_list):
+                    if m == 'f1':
+                        self.__metrics_classification_list[i] = 'f1_weighted'
+                    elif m == 'roc_auc':
+                        self.__metrics_classification_list[i] = 'roc_auc_ovr_weighted'
+                
+        #setting X
+        self.X = ds.drop(self.y_colname, axis=1)
+        self.__onehot_encoder = OneHotEncoder(sparse=False, dtype=np.int)
+
+        hot_columns = []
+        str_columns = []
+        for i, col in enumerate(self.X.columns):
+            if self.X.dtypes[i] == object: 
+                if len(self.X[col].unique()) <= self.__unique_categoric_limit:
+                    hot_columns.append(col)
+                else:
+                   str_columns.append(col)
+        
+        if len(str_columns) > 0:
+            self.X = self.X.drop(str_columns, axis=1)
+            
+        if len(hot_columns) > 0:
+            self.__onehot_encoder.fit(self.X[hot_columns])
+            
+            hot_cols_names = []
+            
+            for i, name in enumerate(self.__onehot_encoder.feature_names_in_):
+                for cat in self.__onehot_encoder.categories_[i]:
+                    hot_cols_names.append(name + '_' + cat.lower().replace(' ','_'))
+                    
+            self.X = pd.concat([self.X.drop(hot_columns, axis=1)
+                                , pd.DataFrame(self.__onehot_encoder.transform(self.X[hot_columns])
+                                            , columns=hot_cols_names)], axis=1)
+        
+        #splitting dataset
+        self.X_train, self.X_valid, self.y_train, self.y_valid = self.__train_test_split()
+        #normalizing the variables
+        self.scaler = preprocessing.MinMaxScaler()
+        self.X_train = pd.DataFrame(self.scaler.fit_transform(self.X_train), columns=self.X.columns) #fit only with X_train
+        self.X_valid = pd.DataFrame(self.scaler.transform(self.X_valid), columns=self.X.columns)
+        self.y_train = np.asanyarray(self.y_train).reshape(-1, 1).ravel()
+        self.y_valid = np.asanyarray(self.y_valid).reshape(-1, 1).ravel()
+        
         
     def clearResults(self):
         self.__results = None #cleaning the previous results
@@ -91,7 +143,6 @@ class AutoML:
         else:
             columns_list.extend(self.__metrics_regression_list)
         columns_list.append('model_instance')
-        columns_list.append('model_scaler')
         
         self.__results = pd.DataFrame(columns=columns_list)
         del(columns_list)
@@ -100,7 +151,10 @@ class AutoML:
         y_is_num = not y_is_cat
         
         #features engineering
-        features_corr = self.__ds_onlynums.corr()
+        df_train_full = pd.concat([pd.DataFrame(self.X_train, columns=self.X.columns)
+                                   , pd.DataFrame(self.y_train, columns=[self.y_colname])], axis=1)
+ 
+        features_corr = df_train_full.corr()
         #print(features_corr)
         features_candidates = []
         #testing min correlation rate with Y
@@ -110,7 +164,7 @@ class AutoML:
                 features_candidates.append(feat_name)
         
         considered_features = []
-        features_corr = self.__ds_onlynums[features_candidates].corr()
+        features_corr = df_train_full[features_candidates].corr()
         #print(features_corr)
         #testing redudance between features
         for i in range(0, len(features_candidates)):
@@ -163,17 +217,17 @@ class AutoML:
         if resultWithModel:                   
             return self.__results
         #else
-        return self.__results.drop('model_instance', axis=1).drop('model_scaler', axis=1)           
+        return self.__results.drop('model_instance', axis=1)
     
     def YisCategorical(self) -> bool:
-        y_type = type(self.__Y_full.iloc[0,0])
+        y_type = type(self.__y_full.iloc[0,0])
         
         if (y_type == np.bool_
             or y_type == np.str_):
             return True
         #else
         if ((y_type == np.float_)
-            or (len(self.__Y_full[self.y_colname].unique()) > self.__unique_categoric_limit)):
+            or (len(self.__y_full[self.y_colname].unique()) > self.__unique_categoric_limit)):
             return False
         #else
         return True    
@@ -181,37 +235,26 @@ class AutoML:
     def YisContinuous(self) -> bool:
         return not self.YisCategorical()
                    
-    def __train_test_split(self, x_cols):
-        X = self.__ds_onlynums[list(x_cols)]
-        y = self.__Y_full
+    def __train_test_split(self):
+        y = self.__y_full
 
         stratify=None
         if self.YisCategorical():
             stratify = y
             
-        return train_test_split(X, y, train_size=0.8, test_size=0.2, random_state=self.__RANDOM_STATE, stratify=stratify)
+        return train_test_split(self.X, y, train_size=0.8, test_size=0.2, random_state=self.__RANDOM_STATE, stratify=stratify)
         
     def __score_dataset(self, model, x_cols):
         
-        X_train, X_valid, y_train, y_valid = self.__train_test_split(x_cols)
-        #normalizing the variables
-        scaler = preprocessing.MinMaxScaler()
-        X_train = scaler.fit_transform(X_train) #fit only with X_train
-        X_valid = scaler.transform(X_valid)
-        
-        X_train2 = X_train
-        X_valid2 = X_valid
-        y_train2 = y_train
-        y_valid2 = y_valid
+        X_train2 = self.X_train[list(x_cols)]
+        X_valid2 = self.X_valid[list(x_cols)]
         
         if len(x_cols)==1:
-            X_train2 = np.asanyarray(X_train).reshape(-1, 1)
-            X_valid2 = np.asanyarray(X_valid).reshape(-1, 1)
+            X_train2 = np.asanyarray(X_train2).reshape(-1, 1)
+            X_valid2 = np.asanyarray(X_valid2).reshape(-1, 1)
 
-        y_train2 = np.asanyarray(y_train).reshape(-1, 1).ravel()
-        y_valid2 = np.asanyarray(y_valid).reshape(-1, 1).ravel()
 
-        model.fit(X_train2, y_train2)
+        model.fit(X_train2, self.y_train)
         
         scoring_list = self.__metrics_regression_list
         if self.YisCategorical():
@@ -220,21 +263,20 @@ class AutoML:
         metrics_value_list = []
         
         for scor in scoring_list:
-            metrics_value_list.append(np.mean(cross_val_score(model, X_valid2, y_valid2, cv=5, scoring=scor)))
+            metrics_value_list.append(np.mean(cross_val_score(model, X_valid2, self.y_valid, cv=5, scoring=scor)))
         
         result_list = metrics_value_list
 
         if self.YisCategorical():
             #confusion matrix
-            result_list.append(confusion_matrix(y_valid2, model.predict(X_valid2)))
+            result_list.append(confusion_matrix(self.y_valid, model.predict(X_valid2)))
 
         #model
         result_list.append(model)
-        result_list.append(scaler)       
         
         return np.array(result_list, dtype=object)
 
-#util methods
+#utilitary methods
 def all_subsets(ss):
     return list(chain(*map(lambda x: combinations(ss, x), range(0, len(ss)+1))))
 
