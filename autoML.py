@@ -91,6 +91,7 @@ class AutoML:
         else:
             columns_list.extend(self.__metrics_regression_list)
         columns_list.append('model_instance')
+        columns_list.append('model_scaler')
         
         self.__results = pd.DataFrame(columns=columns_list)
         del(columns_list)
@@ -162,7 +163,7 @@ class AutoML:
         if resultWithModel:                   
             return self.__results
         #else
-        return self.__results.drop('model_instance', axis=1)           
+        return self.__results.drop('model_instance', axis=1).drop('model_scaler', axis=1)           
     
     def YisCategorical(self) -> bool:
         y_type = type(self.__Y_full.iloc[0,0])
@@ -183,15 +184,15 @@ class AutoML:
     def __train_test_split(self, x_cols):
         X = self.__ds_onlynums[list(x_cols)]
         y = self.__Y_full
-        #normalizing the variables
-        min_max_scaler = preprocessing.MinMaxScaler()
-        X_normal = min_max_scaler.fit_transform(X)
-        y_normal = min_max_scaler.fit_transform(y)
-        return train_test_split(X_normal, y_normal, train_size=0.8, test_size=0.2, random_state=self.__RANDOM_STATE)
+        return train_test_split(X, y, train_size=0.8, test_size=0.2, random_state=self.__RANDOM_STATE)
         
     def __score_dataset(self, model, x_cols):
         
         X_train, X_valid, y_train, y_valid = self.__train_test_split(x_cols)
+        #normalizing the variables
+        scaler = preprocessing.MinMaxScaler()
+        X_train = scaler.fit_transform(X_train) #fit only with X_train
+        X_valid = scaler.transform(X_valid)
         
         X_train2 = X_train
         X_valid2 = X_valid
@@ -204,7 +205,7 @@ class AutoML:
             y_train2 = np.asanyarray(y_train).reshape(-1, 1)
             y_valid2 = np.asanyarray(y_valid).reshape(-1, 1)
 
-        model.fit(X_train2, y_train2.ravel())
+        model.fit(X_train2, y_train2)
         
         scoring_list = self.__metrics_regression_list
         if self.YisCategorical():
@@ -213,7 +214,7 @@ class AutoML:
         metrics_value_list = []
         
         for scor in scoring_list:
-            metrics_value_list.append(np.mean(cross_val_score(model, X_valid2, y_valid2.ravel(), cv=5, scoring=scor)))
+            metrics_value_list.append(np.mean(cross_val_score(model, X_valid2, y_valid2, cv=5, scoring=scor)))
         
         result_list = metrics_value_list
 
@@ -222,7 +223,9 @@ class AutoML:
             result_list.append(confusion_matrix(y_valid2, model.predict(X_valid2)))
 
         #model
-        result_list.append(model)       
+        result_list.append(model)
+        result_list.append(scaler)       
+        
         return np.array(result_list, dtype=object)
 
 #util methods
