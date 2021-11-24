@@ -184,7 +184,12 @@ class AutoML:
     def __train_test_split(self, x_cols):
         X = self.__ds_onlynums[list(x_cols)]
         y = self.__Y_full
-        return train_test_split(X, y, train_size=0.8, test_size=0.2, random_state=self.__RANDOM_STATE)
+
+        stratify=None
+        if self.YisCategorical():
+            stratify = y
+            
+        return train_test_split(X, y, train_size=0.8, test_size=0.2, random_state=self.__RANDOM_STATE, stratify=stratify)
         
     def __score_dataset(self, model, x_cols):
         
@@ -202,8 +207,9 @@ class AutoML:
         if len(x_cols)==1:
             X_train2 = np.asanyarray(X_train).reshape(-1, 1)
             X_valid2 = np.asanyarray(X_valid).reshape(-1, 1)
-            y_train2 = np.asanyarray(y_train).reshape(-1, 1)
-            y_valid2 = np.asanyarray(y_valid).reshape(-1, 1)
+
+        y_train2 = np.asanyarray(y_train).reshape(-1, 1).ravel()
+        y_valid2 = np.asanyarray(y_valid).reshape(-1, 1).ravel()
 
         model.fit(X_train2, y_train2)
         
