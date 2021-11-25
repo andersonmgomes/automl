@@ -22,8 +22,8 @@ class AutoML:
                                  , neighbors.KNeighborsRegressor(), linear_model.LogisticRegression()
                                  , svm.SVC(probability=True), neighbors.KNeighborsClassifier(), tree.DecisionTreeClassifier()]
                  , unique_categoric_limit = 10 
-                 , min_x_y_correlation_rate = 0.3
-                 , n_features_threshold = 0.85
+                 , min_x_y_correlation_rate = 0.001
+                 , n_features_threshold = 0.999
                  ) -> None:
         #initializing variables
         self.__results = None

@@ -20,7 +20,7 @@ def testAutoML(ds, y_colname):
     del(automl)
 
 if __name__ == '__main__':
-    df = pd.read_csv('https://www.openml.org/data/get_csv/16826755/phpMYEkMl', na_values='?')
+    df = pd.read_csv('datasets/titanic.csv')
     testAutoML(df, 'survived')   
     '''
     testAutoML(util.getDSPriceHousing_ClassProb().drop('Address', axis=1), 'high_price')
