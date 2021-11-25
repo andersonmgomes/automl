@@ -43,6 +43,8 @@ class AutoML:
         self.y_colname = y_colname
         self.__y_full = ds[[self.y_colname]]
         self.__y_encoder = None
+        self.y = np.asanyarray(self.__y_full).reshape(-1, 1).ravel()
+        
         if self.YisCategorical():
             #encoding
             self.__y_encoder = OrdinalEncoder(dtype=np.int)
@@ -207,9 +209,6 @@ class AutoML:
                                                                                     , mem_max], dtype=object)
                                                                         , score_result))
         
-        #TODO: #2 implements multindex
-        #self.__results.set_index(['algorithm', 'features'], inplace=True) 
-
         sortby = self.__metrics_regression_list[0] #considering the first element the most important
         if y_is_cat:
             sortby = self.__metrics_classification_list[0] #considering the first element the most important
@@ -256,9 +255,6 @@ class AutoML:
             X_train2 = np.asanyarray(X_train2).reshape(-1, 1)
             X_valid2 = np.asanyarray(X_valid2).reshape(-1, 1)
 
-
-        model.fit(X_train2, self.y_train)
-        
         scoring_list = self.__metrics_regression_list
         if self.YisCategorical():
             scoring_list = self.__metrics_classification_list
@@ -266,10 +262,11 @@ class AutoML:
         metrics_value_list = []
         
         for scor in scoring_list:
-            metrics_value_list.append(np.mean(cross_val_score(model, X_valid2, self.y_valid, cv=5, scoring=scor)))
+            metrics_value_list.append(np.mean(cross_val_score(model, self.X[list(x_cols)], self.y, cv=5, scoring=scor)))
         
         result_list = metrics_value_list
 
+        model.fit(X_train2, self.y_train)
         if self.YisCategorical():
             #confusion matrix
             result_list.append(confusion_matrix(self.y_valid, model.predict(X_valid2)))

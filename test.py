@@ -22,7 +22,7 @@ def testAutoML(ds, y_colname):
 if __name__ == '__main__':
     df = pd.read_csv('datasets/titanic.csv')
     testAutoML(df, 'survived')   
-    '''
+
     testAutoML(util.getDSPriceHousing_ClassProb().drop('Address', axis=1), 'high_price')
     testAutoML(util.getDSFuelConsumptionCo2(), 'CO2EMISSIONS')
     testAutoML(util.getDSPriceHousing().drop('Address', axis=1), 'Price')
@@ -33,4 +33,4 @@ if __name__ == '__main__':
     df = pd.read_csv('https://archive.ics.uci.edu/ml/machine-learning-databases/car/car.data', header=None)
     df.columns = ['buying','maint', 'doors', 'persons', 'lug_boot', 'safety', 'car']
     testAutoML(df, 'car')
-    '''
+    
