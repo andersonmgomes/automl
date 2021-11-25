@@ -17,7 +17,7 @@ from sklearn.preprocessing import OneHotEncoder
 from sklearn.preprocessing import OrdinalEncoder
 
 class AutoML:
-    def __init__(self, ds, y_colname = 'y'
+    def __init__(self, ds_source, y_colname = 'y'
                  , algorithms = [linear_model.LinearRegression(), svm.SVR(), tree.DecisionTreeRegressor()
                                  , neighbors.KNeighborsRegressor(), linear_model.LogisticRegression()
                                  , svm.SVC(probability=True), neighbors.KNeighborsClassifier(), tree.DecisionTreeClassifier()]
@@ -35,6 +35,9 @@ class AutoML:
         self.__min_x_y_correlation_rate = min_x_y_correlation_rate #TODO: #1 MIN_X_Y_CORRELATION_RATE: define this value dynamically
         self.__n_features_threshold = n_features_threshold #TODO: N_FEATURES_THRESHOLD: define this value dynamically
         self.__RANDOM_STATE = 1102
+        
+        #NaN values
+        ds = ds_source.dropna()
         
         #setting Y
         self.y_colname = y_colname
