@@ -4,6 +4,9 @@ from sklearn import svm
 from sklearn.datasets import load_boston
 import pandas as pd
 
+def testAutoMLByCSV(csv_path, y_colname):
+    return testAutoML(pd.read_csv(csv_path), y_colname=y_colname)
+
 def testAutoML(ds, y_colname):
     automl = AutoML(ds, y_colname)
     automl.setNFeaturesThreshold(0.999)
@@ -20,6 +23,9 @@ def testAutoML(ds, y_colname):
     del(automl)
 
 if __name__ == '__main__':
+    testAutoMLByCSV('datasets/viaturas4Model.csv', 'y')
+    #testAutoML(util.getDSFuelConsumptionCo2(), 'CO2EMISSIONS')
+    '''
     df = pd.read_csv('datasets/titanic.csv')
     testAutoML(df, 'survived')   
 
@@ -33,4 +39,4 @@ if __name__ == '__main__':
     df = pd.read_csv('https://archive.ics.uci.edu/ml/machine-learning-databases/car/car.data', header=None)
     df.columns = ['buying','maint', 'doors', 'persons', 'lug_boot', 'safety', 'car']
     testAutoML(df, 'car')
-    
+    '''

@@ -39,6 +39,9 @@ class AutoML:
         #NaN values
         ds = ds_source.dropna()
         
+        #shuffle data to minimize bias tendency
+        ds = ds.sample(frac=1)
+
         #setting Y
         self.y_colname = y_colname
         self.__y_full = ds[[self.y_colname]]
@@ -160,7 +163,8 @@ class AutoML:
                                    , pd.DataFrame(self.y_train, columns=[self.y_colname])], axis=1)
  
         features_corr = df_train_full.corr()
-        #print(features_corr)
+        #features_corr.to_csv('features_corr.csv')
+
         features_candidates = []
         #testing min correlation rate with Y
         for feat_name,corr_value in features_corr[self.y_colname].items():
