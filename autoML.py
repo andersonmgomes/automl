@@ -1,20 +1,57 @@
+from numpy.core.numeric import Infinity, NaN
+import pandas as pd 
+#import modin.pandas as pd #https://modin.readthedocs.io/
 from numpy.lib.function_base import append
 from sklearn.base import ClassifierMixin, RegressorMixin
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import cross_val_score
 from sklearn import linear_model, utils
 import numpy as np
-from itertools import chain, combinations
+from scipy.special import comb
 from sklearn import preprocessing
 from sklearn import svm
 from sklearn import tree
 from sklearn import neighbors
-import pandas as pd 
 import time
 from memory_profiler import memory_usage
 from sklearn.metrics import confusion_matrix
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.preprocessing import OrdinalEncoder
+import ray
+import scipy.stats as sta
+from joblib import Parallel, delayed
+import warnings
+import math
+from bitarray import bitarray
+from bitarray import util as bautil
+from multiprocessing import Pool
+
+def features_corr_level_Y(i, X, y, threshold):
+    #features engineering
+    #testing correlation between X and Y
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        corr = sta.pearsonr(X, y)[0]
+    if ( (corr != corr) #NaN value for correlation because constant feature
+        or (abs(corr) < threshold)
+        ):
+        return None#x[i] below the threshold
+    #else: feature ok with Y
+    return i
+
+def features_corr_level_X(X_0, X_i, threshold):
+    #features engineering
+    #testing correlation between X_0 and X_i
+    for i in range(0, X_i.shape[1]):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            corr = sta.pearsonr(X_0, X_i.iloc[:,i])[0]
+        if ( (corr != corr) #NaN value for correlation because constant feature
+            or (abs(corr) > threshold)
+            ):
+            return 0#x[i] above the threshold
+    #else: feature ok, no redundance
+    return 1
 
 class AutoML:
     def __init__(self, ds_source, y_colname = 'y'
@@ -22,9 +59,10 @@ class AutoML:
                                  , neighbors.KNeighborsRegressor(), linear_model.LogisticRegression()
                                  , svm.SVC(probability=True), neighbors.KNeighborsClassifier(), tree.DecisionTreeClassifier()]
                  , unique_categoric_limit = 10 
-                 , min_x_y_correlation_rate = 0.001
-                 , n_features_threshold = 0.999
+                 , min_x_y_correlation_rate = 0.01
+                 , n_features_threshold = 1
                  ) -> None:
+        #ray.init(ignore_reinit_error=True)
         #initializing variables
         self.__results = None
         self.algorithms = algorithms
@@ -36,8 +74,10 @@ class AutoML:
         self.__n_features_threshold = n_features_threshold #TODO: N_FEATURES_THRESHOLD: define this value dynamically
         self.__RANDOM_STATE = 1102
         
+        print('Original dataset dimensions:', ds_source.shape)
         #NaN values
         ds = ds_source.dropna()
+        print('Dataset dimensions after drop NaN values:', ds.shape)
         
         #shuffle data to minimize bias tendency
         ds = ds.sample(frac=1)
@@ -49,6 +89,7 @@ class AutoML:
         self.y = np.asanyarray(self.__y_full).reshape(-1, 1).ravel()
         
         if self.YisCategorical():
+            print('ML problem type: Classification')
             #encoding
             self.__y_encoder = OrdinalEncoder(dtype=np.int)
             self.__y_full = pd.DataFrame(self.__y_encoder.fit_transform(self.__y_full), columns=[self.y_colname])
@@ -59,7 +100,11 @@ class AutoML:
                         self.__metrics_classification_list[i] = 'f1_weighted'
                     elif m == 'roc_auc':
                         self.__metrics_classification_list[i] = 'roc_auc_ovr_weighted'
-                
+        else:
+            print('ML problem type: Regression')
+
+        print('   Applied metrics:', self.__metrics_classification_list)
+        
         #setting X
         self.X = ds.drop(self.y_colname, axis=1)
         self.__onehot_encoder = OneHotEncoder(sparse=False, dtype=np.int)
@@ -77,6 +122,7 @@ class AutoML:
             self.X = self.X.drop(str_columns, axis=1)
             
         if len(hot_columns) > 0:
+            print('One hot encoder columns:', hot_columns)
             self.__onehot_encoder.fit(self.X[hot_columns])
             
             hot_cols_names = []
@@ -89,14 +135,52 @@ class AutoML:
                                 , pd.DataFrame(self.__onehot_encoder.transform(self.X[hot_columns])
                                             , columns=hot_cols_names)], axis=1)
         
-        #splitting dataset
-        self.X_train, self.X_valid, self.y_train, self.y_valid = self.__train_test_split()
         #normalizing the variables
+        print('Normalizing the variables...')
         self.scaler = preprocessing.MinMaxScaler()
-        self.X_train = pd.DataFrame(self.scaler.fit_transform(self.X_train), columns=self.X.columns) #fit only with X_train
-        self.X_valid = pd.DataFrame(self.scaler.transform(self.X_valid), columns=self.X.columns)
+        self.X = pd.DataFrame(self.scaler.fit_transform(self.X), columns=self.X.columns) 
+
+        #splitting dataset
+        print('Splitting dataset...')
+        self.X_train, self.X_valid, self.y_train, self.y_valid = self.__train_test_split()
+        print('   X_train dimensions:', self.X_train.shape)
         self.y_train = np.asanyarray(self.y_train).reshape(-1, 1).ravel()
         self.y_valid = np.asanyarray(self.y_valid).reshape(-1, 1).ravel()
+        
+        #running feature engineering in paralel
+        n_cols = self.X_train.shape[1]
+        print('Features engineering - Testing correlation with Y...')
+        considered_features = Parallel(n_jobs=-1, backend="multiprocessing")(delayed(features_corr_level_Y)
+                                  (i
+                                   , self.X_train.iloc[:,i]
+                                   , self.y_train
+                                   , self.__min_x_y_correlation_rate)
+                                  for i in range(0, n_cols))
+        considered_features = [x for x in considered_features if x is not None]
+        self.X_train = self.X_train.iloc[:,considered_features]
+        self.X_valid = self.X_valid.iloc[:,considered_features]
+        
+        def n_features_2str():
+            return "{:.2f}".format(100*(1-len(considered_features)/self.X.shape[1])) + "% (" + str(len(considered_features)) + " remained)"
+        
+        print('   Features engineering - Features reduction after correlation test with Y:'
+              , n_features_2str())
+        
+        print('Features engineering - Testing redudance between features...')    
+        self.X_train = pd.concat([self.X_train, self.X_train.iloc[:,0]], axis=1)
+        n_cols = self.X_train.shape[1]
+        considered_features = Parallel(n_jobs=-1, backend="multiprocessing")(delayed(features_corr_level_X)
+                                  (self.X_train.iloc[:,i]
+                                   , self.X_train.iloc[:,i+1:]
+                                   , (1-self.__min_x_y_correlation_rate))
+                                  for i in range(0, n_cols-1))
+
+        considered_features = [x for x in considered_features if x is not None]
+        self.X_train = self.X_train.iloc[:,considered_features]
+        self.X_valid = self.X_valid.iloc[:,considered_features]
+        
+        print('   Features engineering - Features reduction after redudance test:'
+              , n_features_2str())
         
         
     def clearResults(self):
@@ -135,6 +219,9 @@ class AutoML:
         #else
         return self.getResults(resultWithModel).iloc[0]
     
+    def __train_models(self):
+        pass
+    
     def getResults(self, resultWithModel=False, buffer=True):
         if buffer and self.__results is not None:
             if resultWithModel:                   
@@ -157,53 +244,34 @@ class AutoML:
         
         y_is_cat = self.YisCategorical()
         y_is_num = not y_is_cat
-        
-        #features engineering
-        df_train_full = pd.concat([pd.DataFrame(self.X_train, columns=self.X.columns)
-                                   , pd.DataFrame(self.y_train, columns=[self.y_colname])], axis=1)
- 
-        features_corr = df_train_full.corr()
-        #features_corr.to_csv('features_corr.csv')
 
-        features_candidates = []
-        #testing min correlation rate with Y
-        for feat_name,corr_value in features_corr[self.y_colname].items():
-            if ((abs(corr_value) > self.__min_x_y_correlation_rate)
-                and (feat_name != self.y_colname)):
-                features_candidates.append(feat_name)
-        
-        considered_features = []
-        features_corr = df_train_full[features_candidates].corr()
-        #print(features_corr)
-        #testing redudance between features
-        for i in range(0, len(features_candidates)):
-            no_redudance = True
-            for j in range(i+1, len(features_candidates)):
-                if ((abs(features_corr.iloc[i][j]) > (1-self.__min_x_y_correlation_rate))):
-                    no_redudance = False
-                    break
-            if no_redudance:
-                considered_features.append(features_candidates[i])
-            
-        subsets = all_subsets(considered_features)
-        del(features_corr)
-        del(features_candidates)
-        
+        selected_algos = []
+
         for algo in self.algorithms:
             if  ((y_is_cat and isinstance(algo, RegressorMixin)) #Y is incompatible with algorithm        
                  or (y_is_num and isinstance(algo, ClassifierMixin))#Y is incompatible with algorithm
             ):
                 continue
             #else: all right
+            selected_algos.append(algo)
+        
+        
+        #setup the bitmap to genetic algorithm
+        n_bits_algos = len(bautil.int2ba(len(selected_algos)-1))
+        n_cols = self.X_train.shape[1] + n_bits_algos
+        self.X_bitmap = bitarray(n_cols)
+        self.X_bitmap.setall(1)
+        
+        '''
             algo_id = str(algo).replace('()','')
-            #print('*** Testing algo ' + algo_id + '...')
+            print('*** Testing algo ' + algo_id + '...')
             for col_tuple in subsets:
-                if ((len(col_tuple) == 0)#empty subsets
-                    or ((len(col_tuple)/len(considered_features)) < self.__n_features_threshold)
-                    ): 
-                    continue
+                #if ((len(col_tuple) == 0)#empty subsets
+                #    or ((len(col_tuple)/len(considered_features)) <= self.__n_features_threshold)
+                #    ): 
+                #    continue
                 #else: all right
-                #print('cols:' + str(col_tuple) + '...')
+                print('***Testing features: ' + str(col_tuple) + '...')
                 t0 = time.perf_counter()
                 mem_max, score_result = memory_usage(proc=(self.__score_dataset, (algo, col_tuple)), max_usage=True
                                                      , retval=True, include_children=True)
@@ -224,7 +292,7 @@ class AutoML:
             return self.__results
         #else
         return self.__results.drop('model_instance', axis=1)
-    
+        '''
     def YisCategorical(self) -> bool:
         y_type = type(self.__y_full.iloc[0,0])
         
@@ -281,8 +349,8 @@ class AutoML:
         return np.array(result_list, dtype=object)
 
 #utilitary methods
-def all_subsets(ss):
-    return list(chain(*map(lambda x: combinations(ss, x), range(0, len(ss)+1))))
+#def all_subsets(ss, min_n = 1):
+#    return list(chain(*map(lambda x: combinations(ss, x), range(min_n, len(ss)+1))))
 
 from cf_matrix import make_confusion_matrix
 
@@ -291,3 +359,5 @@ def getConfusionMatrixHeatMap(cf_matrix, title='CF Matrix'):
     categories = ['Zero', 'One']
     return make_confusion_matrix(cf_matrix, group_names=group_names, categories=categories, cmap='Blues', title=title);    
 
+#if __name__ == '__main__':
+#    print(all_subsets([1,2,3], 2))
