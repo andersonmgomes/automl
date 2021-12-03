@@ -22,12 +22,6 @@ def testAutoML(ds, y_colname):
         print(automl.getBestResult()['features'])
     del(automl)
 
-from itertools import chain, combinations
-
-def all_subsets(ss, min_n = 1):
-    return list(chain(*map(lambda x: combinations(ss, x), range(min_n, len(ss)+1))))
-
-
 if __name__ == '__main__':
     testAutoML(util.getDSPriceHousing_ClassProb().drop('Address', axis=1), 'high_price')
     #ray.init(ignore_reinit_error=True)

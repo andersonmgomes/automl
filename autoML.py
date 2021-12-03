@@ -150,14 +150,14 @@ def evalOneMax(individual, n_bits_algos, selected_algos
 
 def ga_toolbox(n_cols, n_bits_algos, selected_algos
                , X_bitmap, X_train, X_valid, y_train, y_valid, X, y, __results, main_metric
-               , YisCategorical, __metrics_regression_list, __metrics_classification_list):
+               , YisCategorical, __metrics_regression_list, __metrics_classification_list, pool=None):
     #genetics algorithm
     creator.create("FitnessMax", base.Fitness, weights=(1.0,))
     creator.create("Individual", list, fitness=creator.FitnessMax)
     toolbox = base.Toolbox()
-    #pool = Pool()
-    #toolbox.register("map", pool.map)        
-    toolbox.register("map", futures.map)
+    if not(pool is None):
+        toolbox.register("map", pool.map)        
+    #toolbox.register("map", futures.map)
     toolbox.register("attr_bool", random.randint, 0, 1)
     toolbox.register("individual", tools.initRepeat, creator.Individual, toolbox.attr_bool, n=n_cols)
     toolbox.register("population", tools.initRepeat, list, toolbox.individual)
@@ -170,17 +170,15 @@ def ga_toolbox(n_cols, n_bits_algos, selected_algos
     toolbox.register("mutate", tools.mutFlipBit, indpb=0.05)
     toolbox.register("select", tools.selTournament, tournsize=3)
     return toolbox
-    
-    
-    
 
 class AutoML:
     ALGORITHMS = [
         #classifiers
         #https://scikit-learn.org/stable/auto_examples/classification/plot_classifier_comparison.html
         KNeighborsClassifier(3),
-        SVC(kernel="linear", C=0.025),
-        SVC(gamma=2, C=1),
+        #SVC(kernel="linear", C=0.025),
+        #SVC(gamma=2, C=1),
+        svm.SVC(probability=True),
         GaussianProcessClassifier(1.0 * RBF(1.0)),
         DecisionTreeClassifier(max_depth=5),
         RandomForestClassifier(max_depth=5, n_estimators=10, max_features=1),
@@ -204,7 +202,7 @@ class AutoML:
                  , unique_categoric_limit = 10 
                  , min_x_y_correlation_rate = 0.01
                  , n_features_threshold = 1
-                 ) -> None:
+                 , pool = None) -> None:
         #ray.init(ignore_reinit_error=True)
         #initializing variables
         self.__results = None
@@ -416,8 +414,10 @@ class AutoML:
         toolbox = ga_toolbox(n_cols, n_bits_algos, selected_algos
                , self.X_bitmap, self.X_train, self.X_valid, self.y_train, self.y_valid, self.X, self.y, self.__results, main_metric
                , self.YisCategorical(), self.__metrics_regression_list, self.__metrics_classification_list)
-        algorithms.eaSimple(toolbox.population(n=n_train_sets), toolbox, cxpb=0.5, mutpb=0.2, ngen=100, verbose=False)
-
+        #algorithms.eaSimple(toolbox.population(n=n_train_sets), toolbox, cxpb=0.5, mutpb=0.2, ngen=10, verbose=False)
+        #algorithms.eaSimple(toolbox.population(n=int(0.01*n_train_sets*len(selected_algos))), toolbox, cxpb=0.5, mutpb=0.2, ngen=10, verbose=False)
+        algorithms.eaSimple(toolbox.population(n=50), toolbox, cxpb=0.5, mutpb=0.2, ngen=10, verbose=False)
+        
         #preparing the results
         self.__results.sort_values(by=main_metric, ascending=False, inplace=True)
         self.__results.reset_index(inplace=True, drop=True)        
@@ -463,5 +463,27 @@ def getConfusionMatrixHeatMap(cf_matrix, title='CF Matrix'):
     categories = ['Zero', 'One']
     return make_confusion_matrix(cf_matrix, group_names=group_names, categories=categories, cmap='Blues', title=title);    
 
-#if __name__ == '__main__':
-#    print(all_subsets([1,2,3], 2))
+def testAutoMLByCSV(csv_path, y_colname):
+    return testAutoML(pd.read_csv(csv_path), y_colname=y_colname)
+
+import ds_utils as util
+
+def testAutoML(ds, y_colname):
+    automl = AutoML(ds, y_colname, min_x_y_correlation_rate=0.06)
+    #automl.setAlgorithm(svm.SVC())
+    if automl.YisCategorical():
+        print(automl.getBestResult().confusion_matrix)
+    
+    df4print = automl.getResults()
+    print(df4print.head())
+    print(automl.getBestResult())
+    if automl.getBestResult() is not None:
+        print(automl.getBestResult()['features'])
+    del(automl)
+
+if __name__ == '__main__':
+    pool = Pool(processes=6)
+    automl = AutoML(util.getDSWine_RED_ClassProb(), 'high_quality'
+                    , min_x_y_correlation_rate=0.06
+                    , pool=pool)
+    print(automl.getBestResult())
