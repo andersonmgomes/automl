@@ -296,7 +296,10 @@ class AutoML:
             if math.isinf(n_train_sets):
                 break
 
-        print('Nº training possible features subsets:', n_train_sets)
+        print('Nº of training possible combinations:'
+              , n_train_sets*len(selected_algos)
+              , '(' + str(n_train_sets),'features,'
+              , str(len(selected_algos)) +' algorithms)')
 
         if math.isinf(n_train_sets):
             n_train_sets = self.X_train.shape[1]
@@ -378,6 +381,10 @@ class AutoML:
         #model
         result_list.append(model)
         
+        print('   *Model trained:', str(scoring_list[0]), '='
+              , '{:.5f}'.format(metrics_value_list[0]), '-'
+              , str(model), '-', str(len(x_cols)), 'features'
+              , str(x_cols))
         return np.array(result_list, dtype=object)
 
 #utilitary methods

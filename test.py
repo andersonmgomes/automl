@@ -29,13 +29,14 @@ def all_subsets(ss, min_n = 1):
 
 
 if __name__ == '__main__':
+    testAutoML(util.getDSPriceHousing_ClassProb().drop('Address', axis=1), 'high_price')
     #ray.init(ignore_reinit_error=True)
     #testAutoMLByCSV('datasets/sentimentos.csv', y_colname='classe')
     #df = pd.read_csv('datasets/titanic_original.csv', na_values='?')
     #print(df)
     #testAutoML(df, y_colname='survived')
     #testAutoMLByCSV('datasets/viaturas4Model.csv', 'y')
-    testAutoML(util.getDSFuelConsumptionCo2(), 'CO2EMISSIONS')
+    #testAutoML(util.getDSFuelConsumptionCo2(), 'CO2EMISSIONS')
     '''
     df = pd.read_csv('datasets/titanic.csv')
     testAutoML(df, 'survived')   
