@@ -27,6 +27,22 @@ from bitarray import util as bautil
 from multiprocessing import Pool
 from deap import algorithms, base, creator, tools
 import random
+from sklearn.gaussian_process import GaussianProcessClassifier
+from sklearn.gaussian_process.kernels import RBF
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
+from sklearn.naive_bayes import GaussianNB
+from xgboost import XGBClassifier, XGBRegressor, XGBRFRegressor
+from sklearn.neural_network import MLPClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.svm import SVC
+from sklearn.gaussian_process import GaussianProcessClassifier
+from sklearn.gaussian_process.kernels import RBF
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
+from sklearn.naive_bayes import GaussianNB
+from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
+from scoop import futures
 
 def features_corr_level_Y(i, X, y, threshold):
     #features engineering
@@ -55,11 +71,136 @@ def features_corr_level_X(i, X_0, X_i, threshold):
     #else: feature ok, no redundance
     return i
 
+def evalOneMax(individual, n_bits_algos, selected_algos
+               , X_bitmap, X_train, X_valid, y_train, y_valid, X, y, __results, main_metric
+               , YisCategorical, __metrics_regression_list, __metrics_classification_list):
+    def float2bigint(float_value):
+        return [int(float_value*100000)]
+    
+    def __score_dataset(model, x_cols, X_train, X_valid, y_train, y_valid, X, y
+                        , YisCategorical, __metrics_regression_list, __metrics_classification_list):
+        
+        X_train2 = X_train[list(x_cols)]
+        X_valid2 = X_valid[list(x_cols)]
+        
+        if len(x_cols)==1:
+            X_train2 = np.asanyarray(X_train2).reshape(-1, 1)
+            X_valid2 = np.asanyarray(X_valid2).reshape(-1, 1)
+
+        scoring_list = __metrics_regression_list
+        if YisCategorical:
+            scoring_list = __metrics_classification_list
+        
+        metrics_value_list = []
+        
+        for scor in scoring_list:
+            metrics_value_list.append(np.mean(cross_val_score(model, X[list(x_cols)], y, cv=5, scoring=scor)))
+        
+        result_list = metrics_value_list
+
+        model.fit(X_train2, y_train)
+        if YisCategorical:
+            #confusion matrix
+            result_list.append(confusion_matrix(y_valid, model.predict(X_valid2)))
+
+        #model
+        result_list.append(model)
+        
+        log_msg = '   *Model trained: ' + str(scoring_list[0]) 
+        log_msg += ' = {:.5f}'.format(metrics_value_list[0]) 
+        log_msg += ' - ' + str(len(x_cols)) + ' features' 
+        log_msg += ' - ' + str(model)[:str(model).find('(')+5] 
+        log_msg += ' - ' + str(x_cols)
+                
+        print(log_msg[:150].replace('\n',''))#show only the 150 first caracteres
+        
+        return np.array(result_list, dtype=object)
+
+
+    algo = individual[-n_bits_algos:]
+    algo = bautil.ba2int(bitarray(algo)) % len(selected_algos)
+    
+    algo = selected_algos[algo]
+    
+    col_tuple = individual[:len(X_bitmap)-n_bits_algos]
+    col_tuple = tuple([X_train.columns[i] for i, c in enumerate(col_tuple) if c == 1])
+    
+    if len(col_tuple)==0:
+        return float2bigint(-1)
+    
+    #seeking for some previous result
+    previous_result = __results[(__results['algorithm']==str(algo)) & (__results['features'].apply(str)==str(col_tuple))]
+    if previous_result.shape[0]>0:
+        return float2bigint(previous_result[main_metric])
+    #else 
+                
+    t0 = time.perf_counter()
+    mem_max, score_result = memory_usage(proc=(__score_dataset, (algo, col_tuple, X_train, X_valid
+                                                                 , y_train, y_valid, X, y, YisCategorical
+                                                                 , __metrics_regression_list, __metrics_classification_list))
+                                         , max_usage=True
+                                            , retval=True, include_children=True)
+    __results.loc[len(__results)] = np.concatenate((np.array([str(algo), col_tuple
+                                                                        , int(len(col_tuple))
+                                                                        , (time.perf_counter() - t0)
+                                                                        , mem_max], dtype=object)
+                                                            , score_result))
+    return float2bigint(score_result[0])
+
+
+def ga_toolbox(n_cols, n_bits_algos, selected_algos
+               , X_bitmap, X_train, X_valid, y_train, y_valid, X, y, __results, main_metric
+               , YisCategorical, __metrics_regression_list, __metrics_classification_list):
+    #genetics algorithm
+    creator.create("FitnessMax", base.Fitness, weights=(1.0,))
+    creator.create("Individual", list, fitness=creator.FitnessMax)
+    toolbox = base.Toolbox()
+    #pool = Pool()
+    #toolbox.register("map", pool.map)        
+    toolbox.register("map", futures.map)
+    toolbox.register("attr_bool", random.randint, 0, 1)
+    toolbox.register("individual", tools.initRepeat, creator.Individual, toolbox.attr_bool, n=n_cols)
+    toolbox.register("population", tools.initRepeat, list, toolbox.individual)
+    toolbox.register("evaluate", evalOneMax, n_bits_algos=n_bits_algos, selected_algos=selected_algos
+            , X_bitmap=X_bitmap, X_train=X_train, X_valid=X_valid, y_train=y_train
+            , y_valid=y_valid, X=X, y=y, __results=__results, main_metric=main_metric
+            , YisCategorical=YisCategorical, __metrics_regression_list=__metrics_regression_list
+            , __metrics_classification_list=__metrics_classification_list)
+    toolbox.register("mate", tools.cxTwoPoint)
+    toolbox.register("mutate", tools.mutFlipBit, indpb=0.05)
+    toolbox.register("select", tools.selTournament, tournsize=3)
+    return toolbox
+    
+    
+    
+
 class AutoML:
+    ALGORITHMS = [
+        #classifiers
+        #https://scikit-learn.org/stable/auto_examples/classification/plot_classifier_comparison.html
+        KNeighborsClassifier(3),
+        SVC(kernel="linear", C=0.025),
+        SVC(gamma=2, C=1),
+        GaussianProcessClassifier(1.0 * RBF(1.0)),
+        DecisionTreeClassifier(max_depth=5),
+        RandomForestClassifier(max_depth=5, n_estimators=10, max_features=1),
+        MLPClassifier(alpha=1, max_iter=1000),
+        AdaBoostClassifier(),
+        GaussianNB(),
+        QuadraticDiscriminantAnalysis(),
+        XGBClassifier(n_estimators=150, max_depth=4, use_label_encoder=False, eval_metric='mlogloss'),
+        #regressors        
+        XGBRegressor(),
+        XGBRFRegressor(),
+        linear_model.LinearRegression(),
+        svm.SVR(),
+        tree.DecisionTreeRegressor(),
+        neighbors.KNeighborsRegressor(),
+        linear_model.LogisticRegression()    
+    ]    
+    
     def __init__(self, ds_source, y_colname = 'y'
-                 , algorithms = [linear_model.LinearRegression(), svm.SVR(), tree.DecisionTreeRegressor()
-                                 , neighbors.KNeighborsRegressor(), linear_model.LogisticRegression()
-                                 , svm.SVC(probability=True), neighbors.KNeighborsClassifier(), tree.DecisionTreeClassifier()]
+                 , algorithms = ALGORITHMS
                  , unique_categoric_limit = 10 
                  , min_x_y_correlation_rate = 0.01
                  , n_features_threshold = 1
@@ -242,6 +383,7 @@ class AutoML:
             #else: all right
             selected_algos.append(algo)
         
+        print('Selected algorithms:', [str(x)[:str(x).find('(')] for x in selected_algos])
         
         #setup the bitmap to genetic algorithm
         n_bits_algos = len(bautil.int2ba(len(selected_algos)-1))
@@ -254,41 +396,6 @@ class AutoML:
         if y_is_cat:
             main_metric = self.__metrics_classification_list[0] #considering the first element the most important
 
-
-        #genetics algorithm
-        creator.create("FitnessMax", base.Fitness, weights=(1.0,))
-        creator.create("Individual", list, fitness=creator.FitnessMax)
-
-        def evalOneMax(individual):
-            def float2bigint(float_value):
-                return [int(float_value*100000)]
-            
-            algo = individual[-n_bits_algos:]
-            algo = bautil.ba2int(bitarray(algo))
-            algo = selected_algos[algo]
-            
-            col_tuple = individual[:len(self.X_bitmap)-n_bits_algos]
-            col_tuple = tuple([self.X_train.columns[i] for i, c in enumerate(col_tuple) if c == 1])
-            
-            if len(col_tuple)==0:
-                return float2bigint(-1)
-            
-            #seeking for some previous result
-            previous_result = self.__results[(self.__results['algorithm']==str(algo)) & (self.__results['features']==col_tuple)]
-            if previous_result.shape[0]>0:
-                return float2bigint(previous_result[main_metric])
-            #else 
-                        
-            t0 = time.perf_counter()
-            mem_max, score_result = memory_usage(proc=(self.__score_dataset, (algo, col_tuple)), max_usage=True
-                                                    , retval=True, include_children=True)
-            self.__results.loc[len(self.__results)] = np.concatenate((np.array([str(algo), col_tuple
-                                                                                , int(len(col_tuple))
-                                                                                , (time.perf_counter() - t0)
-                                                                                , mem_max], dtype=object)
-                                                                    , score_result))
-            return float2bigint(score_result[0])
-
         #calculating the size of population (features x algorithms)
         n_train_sets = 0
         for k in range(1, self.X_train.shape[1] + 1):
@@ -298,26 +405,18 @@ class AutoML:
 
         print('Nº of training possible combinations:'
               , n_train_sets*len(selected_algos)
-              , '(' + str(n_train_sets),'features,'
+              , '(' + str(n_train_sets),'features combinations,'
               , str(len(selected_algos)) +' algorithms)')
 
         if math.isinf(n_train_sets):
             n_train_sets = self.X_train.shape[1]
 
-        n_train_sets = int(n_train_sets)
+        n_train_sets = int(n_train_sets)        
         
-        toolbox = base.Toolbox()
-        toolbox.register("attr_bool", random.randint, 0, 1)
-        toolbox.register("individual", tools.initRepeat, creator.Individual, toolbox.attr_bool, n=n_cols)
-        toolbox.register("population", tools.initRepeat, list, toolbox.individual)
-        toolbox.register("evaluate", evalOneMax)
-        toolbox.register("mate", tools.cxTwoPoint)
-        toolbox.register("mutate", tools.mutFlipBit, indpb=0.05)
-        toolbox.register("select", tools.selTournament, tournsize=3)
-
-        
-        pop = toolbox.population(n=n_train_sets)
-        algorithms.eaSimple(pop, toolbox, cxpb=0.5, mutpb=0.2, ngen=100, verbose=False)
+        toolbox = ga_toolbox(n_cols, n_bits_algos, selected_algos
+               , self.X_bitmap, self.X_train, self.X_valid, self.y_train, self.y_valid, self.X, self.y, self.__results, main_metric
+               , self.YisCategorical(), self.__metrics_regression_list, self.__metrics_classification_list)
+        algorithms.eaSimple(toolbox.population(n=n_train_sets), toolbox, cxpb=0.5, mutpb=0.2, ngen=100, verbose=False)
 
         #preparing the results
         self.__results.sort_values(by=main_metric, ascending=False, inplace=True)
@@ -352,40 +451,6 @@ class AutoML:
             stratify = y
             
         return train_test_split(self.X, y, train_size=0.8, test_size=0.2, random_state=self.__RANDOM_STATE, stratify=stratify)
-        
-    def __score_dataset(self, model, x_cols):
-        
-        X_train2 = self.X_train[list(x_cols)]
-        X_valid2 = self.X_valid[list(x_cols)]
-        
-        if len(x_cols)==1:
-            X_train2 = np.asanyarray(X_train2).reshape(-1, 1)
-            X_valid2 = np.asanyarray(X_valid2).reshape(-1, 1)
-
-        scoring_list = self.__metrics_regression_list
-        if self.YisCategorical():
-            scoring_list = self.__metrics_classification_list
-        
-        metrics_value_list = []
-        
-        for scor in scoring_list:
-            metrics_value_list.append(np.mean(cross_val_score(model, self.X[list(x_cols)], self.y, cv=5, scoring=scor)))
-        
-        result_list = metrics_value_list
-
-        model.fit(X_train2, self.y_train)
-        if self.YisCategorical():
-            #confusion matrix
-            result_list.append(confusion_matrix(self.y_valid, model.predict(X_valid2)))
-
-        #model
-        result_list.append(model)
-        
-        print('   *Model trained:', str(scoring_list[0]), '='
-              , '{:.5f}'.format(metrics_value_list[0]), '-'
-              , str(model), '-', str(len(x_cols)), 'features'
-              , str(x_cols))
-        return np.array(result_list, dtype=object)
 
 #utilitary methods
 #def all_subsets(ss, min_n = 1):
