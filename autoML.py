@@ -25,6 +25,8 @@ import math
 from bitarray import bitarray
 from bitarray import util as bautil
 from multiprocessing import Pool
+from deap import algorithms, base, creator, tools
+import random
 
 def features_corr_level_Y(i, X, y, threshold):
     #features engineering
@@ -39,7 +41,7 @@ def features_corr_level_Y(i, X, y, threshold):
     #else: feature ok with Y
     return i
 
-def features_corr_level_X(X_0, X_i, threshold):
+def features_corr_level_X(i, X_0, X_i, threshold):
     #features engineering
     #testing correlation between X_0 and X_i
     for i in range(0, X_i.shape[1]):
@@ -49,9 +51,9 @@ def features_corr_level_X(X_0, X_i, threshold):
         if ( (corr != corr) #NaN value for correlation because constant feature
             or (abs(corr) > threshold)
             ):
-            return 0#x[i] above the threshold
+            return None#x[i] above the threshold
     #else: feature ok, no redundance
-    return 1
+    return i
 
 class AutoML:
     def __init__(self, ds_source, y_colname = 'y'
@@ -167,10 +169,11 @@ class AutoML:
               , n_features_2str())
         
         print('Features engineering - Testing redudance between features...')    
-        self.X_train = pd.concat([self.X_train, self.X_train.iloc[:,0]], axis=1)
+        
         n_cols = self.X_train.shape[1]
         considered_features = Parallel(n_jobs=-1, backend="multiprocessing")(delayed(features_corr_level_X)
-                                  (self.X_train.iloc[:,i]
+                                  (i
+                                   ,self.X_train.iloc[:,i]
                                    , self.X_train.iloc[:,i+1:]
                                    , (1-self.__min_x_y_correlation_rate))
                                   for i in range(0, n_cols-1))
@@ -186,22 +189,6 @@ class AutoML:
     def clearResults(self):
         self.__results = None #cleaning the previous results
         
-    def processAllFeatureCombinations(self):
-        self.setNFeaturesThreshold(0)
-        
-    def setNFeaturesThreshold(self, threshold):
-        self.__n_features_threshold = threshold
-        self.clearResults()
-
-    def setMinXYcorrRate(self, rate):
-        self.__min_x_y_correlation_rate = rate
-        self.clearResults()
-        
-    def setAlgorithm(self, algo):
-        self.algorithms.clear()
-        self.algorithms.append(algo)
-        self.clearResults()
-    
     def getBestModel(self):
         if self.getBestResult(True) is None:
             return None
@@ -261,38 +248,83 @@ class AutoML:
         n_cols = self.X_train.shape[1] + n_bits_algos
         self.X_bitmap = bitarray(n_cols)
         self.X_bitmap.setall(1)
-        
-        '''
-            algo_id = str(algo).replace('()','')
-            print('*** Testing algo ' + algo_id + '...')
-            for col_tuple in subsets:
-                #if ((len(col_tuple) == 0)#empty subsets
-                #    or ((len(col_tuple)/len(considered_features)) <= self.__n_features_threshold)
-                #    ): 
-                #    continue
-                #else: all right
-                print('***Testing features: ' + str(col_tuple) + '...')
-                t0 = time.perf_counter()
-                mem_max, score_result = memory_usage(proc=(self.__score_dataset, (algo, col_tuple)), max_usage=True
-                                                     , retval=True, include_children=True)
-                self.__results.loc[len(self.__results)] = np.concatenate((np.array([algo_id, col_tuple
-                                                                                    , int(len(col_tuple))
-                                                                                    , (time.perf_counter() - t0)
-                                                                                    , mem_max], dtype=object)
-                                                                        , score_result))
-        
-        sortby = self.__metrics_regression_list[0] #considering the first element the most important
+
+        #main metric column
+        main_metric = self.__metrics_regression_list[0] #considering the first element the most important
         if y_is_cat:
-            sortby = self.__metrics_classification_list[0] #considering the first element the most important
+            main_metric = self.__metrics_classification_list[0] #considering the first element the most important
+
+
+        #genetics algorithm
+        creator.create("FitnessMax", base.Fitness, weights=(1.0,))
+        creator.create("Individual", list, fitness=creator.FitnessMax)
+
+        def evalOneMax(individual):
+            def float2bigint(float_value):
+                return [int(float_value*100000)]
             
-        self.__results.sort_values(by=sortby, ascending=False, inplace=True)
+            algo = individual[-n_bits_algos:]
+            algo = bautil.ba2int(bitarray(algo))
+            algo = selected_algos[algo]
+            
+            col_tuple = individual[:len(self.X_bitmap)-n_bits_algos]
+            col_tuple = tuple([self.X_train.columns[i] for i, c in enumerate(col_tuple) if c == 1])
+            
+            if len(col_tuple)==0:
+                return float2bigint(-1)
+            
+            #seeking for some previous result
+            previous_result = self.__results[(self.__results['algorithm']==str(algo)) & (self.__results['features']==col_tuple)]
+            if previous_result.shape[0]>0:
+                return float2bigint(previous_result[main_metric])
+            #else 
+                        
+            t0 = time.perf_counter()
+            mem_max, score_result = memory_usage(proc=(self.__score_dataset, (algo, col_tuple)), max_usage=True
+                                                    , retval=True, include_children=True)
+            self.__results.loc[len(self.__results)] = np.concatenate((np.array([str(algo), col_tuple
+                                                                                , int(len(col_tuple))
+                                                                                , (time.perf_counter() - t0)
+                                                                                , mem_max], dtype=object)
+                                                                    , score_result))
+            return float2bigint(score_result[0])
+
+        #calculating the size of population (features x algorithms)
+        n_train_sets = 0
+        for k in range(1, self.X_train.shape[1] + 1):
+            n_train_sets += comb(self.X_train.shape[1] + 1, k, exact=False)
+            if math.isinf(n_train_sets):
+                break
+
+        print('Nº training possible features subsets:', n_train_sets)
+
+        if math.isinf(n_train_sets):
+            n_train_sets = self.X_train.shape[1]
+
+        n_train_sets = int(n_train_sets)
+        
+        toolbox = base.Toolbox()
+        toolbox.register("attr_bool", random.randint, 0, 1)
+        toolbox.register("individual", tools.initRepeat, creator.Individual, toolbox.attr_bool, n=n_cols)
+        toolbox.register("population", tools.initRepeat, list, toolbox.individual)
+        toolbox.register("evaluate", evalOneMax)
+        toolbox.register("mate", tools.cxTwoPoint)
+        toolbox.register("mutate", tools.mutFlipBit, indpb=0.05)
+        toolbox.register("select", tools.selTournament, tournsize=3)
+
+        
+        pop = toolbox.population(n=n_train_sets)
+        algorithms.eaSimple(pop, toolbox, cxpb=0.5, mutpb=0.2, ngen=100, verbose=False)
+
+        #preparing the results
+        self.__results.sort_values(by=main_metric, ascending=False, inplace=True)
         self.__results.reset_index(inplace=True, drop=True)        
         
         if resultWithModel:                   
             return self.__results
         #else
         return self.__results.drop('model_instance', axis=1)
-        '''
+        
     def YisCategorical(self) -> bool:
         y_type = type(self.__y_full.iloc[0,0])
         
