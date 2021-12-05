@@ -43,6 +43,8 @@ from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 from scoop import futures
+from datetime import datetime
+import math
 
 def features_corr_level_Y(i, X, y, threshold):
     #features engineering
@@ -75,6 +77,8 @@ def evalOneMax(individual, n_bits_algos, selected_algos
                , X_bitmap, X_train, X_valid, y_train, y_valid, X, y, __results, main_metric
                , YisCategorical, __metrics_regression_list, __metrics_classification_list):
     def float2bigint(float_value):
+        if math.isnan(float_value):
+            float_value = -1
         return [int(float_value*100000)]
     
     def __score_dataset(model, x_cols, X_train, X_valid, y_train, y_valid, X, y
@@ -151,16 +155,20 @@ def evalOneMax(individual, n_bits_algos, selected_algos
 def ga_toolbox(n_cols, n_bits_algos, selected_algos
                , X_bitmap, X_train, X_valid, y_train, y_valid, X, y, __results, main_metric
                , YisCategorical, __metrics_regression_list, __metrics_classification_list, pool=None):
-    #genetics algorithm
+    #genetics algorithm: creating types
     creator.create("FitnessMax", base.Fitness, weights=(1.0,))
     creator.create("Individual", list, fitness=creator.FitnessMax)
+    #multprocessing
     toolbox = base.Toolbox()
     if not(pool is None):
-        toolbox.register("map", pool.map)        
-    #toolbox.register("map", futures.map)
+        toolbox.register("map", pool.map)     
+
+    #genetics algorithm: initialization
     toolbox.register("attr_bool", random.randint, 0, 1)
     toolbox.register("individual", tools.initRepeat, creator.Individual, toolbox.attr_bool, n=n_cols)
     toolbox.register("population", tools.initRepeat, list, toolbox.individual)
+    
+    #genetics algorithm: operators
     toolbox.register("evaluate", evalOneMax, n_bits_algos=n_bits_algos, selected_algos=selected_algos
             , X_bitmap=X_bitmap, X_train=X_train, X_valid=X_valid, y_train=y_train
             , y_valid=y_valid, X=X, y=y, __results=__results, main_metric=main_metric
@@ -202,7 +210,8 @@ class AutoML:
                  , unique_categoric_limit = 10 
                  , min_x_y_correlation_rate = 0.01
                  , n_features_threshold = 1
-                 , pool = None) -> None:
+                 , pool = None
+                 , ds_name = None) -> None:
         #ray.init(ignore_reinit_error=True)
         #initializing variables
         self.__results = None
@@ -214,6 +223,7 @@ class AutoML:
         self.__min_x_y_correlation_rate = min_x_y_correlation_rate #TODO: #1 MIN_X_Y_CORRELATION_RATE: define this value dynamically
         self.__n_features_threshold = n_features_threshold #TODO: N_FEATURES_THRESHOLD: define this value dynamically
         self.__RANDOM_STATE = 1102
+        self.ds_name = ds_name
         
         print('Original dataset dimensions:', ds_source.shape)
         #NaN values
@@ -416,11 +426,18 @@ class AutoML:
                , self.YisCategorical(), self.__metrics_regression_list, self.__metrics_classification_list)
         #algorithms.eaSimple(toolbox.population(n=n_train_sets), toolbox, cxpb=0.5, mutpb=0.2, ngen=10, verbose=False)
         #algorithms.eaSimple(toolbox.population(n=int(0.01*n_train_sets*len(selected_algos))), toolbox, cxpb=0.5, mutpb=0.2, ngen=10, verbose=False)
-        algorithms.eaSimple(toolbox.population(n=50), toolbox, cxpb=0.5, mutpb=0.2, ngen=10, verbose=False)
+        algorithms.eaSimple(toolbox.population(n=5), toolbox, cxpb=0.5, mutpb=0.2, ngen=10, verbose=False)
         
         #preparing the results
         self.__results.sort_values(by=main_metric, ascending=False, inplace=True)
-        self.__results.reset_index(inplace=True, drop=True)        
+        self.__results = self.__results.rename_axis('train_order').reset_index()        
+
+        #saving results in a csv file
+        filename = datetime.now().strftime("%Y%m%d_%H%M%S")
+        if not(self.ds_name is None):
+            filename += '_' + self.ds_name.upper()
+        filename += '.csv'
+        self.__results.drop('model_instance', axis=1).to_csv('results/' + filename, index=False)
         
         if resultWithModel:                   
             return self.__results
@@ -483,7 +500,8 @@ def testAutoML(ds, y_colname):
 
 if __name__ == '__main__':
     pool = Pool(processes=6)
-    automl = AutoML(util.getDSWine_RED_ClassProb(), 'high_quality'
-                    , min_x_y_correlation_rate=0.06
-                    , pool=pool)
+    automl = AutoML(util.getDSIris(), 'class'
+                    , min_x_y_correlation_rate=0.01
+                    , pool=pool
+                    , ds_name='iris')
     print(automl.getBestResult())

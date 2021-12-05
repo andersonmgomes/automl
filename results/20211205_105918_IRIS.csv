@@ -1,0 +1,28 @@
+train_order,algorithm,features,n_features,train_time,mem_max,f1_weighted,accuracy,roc_auc_ovr_weighted,confusion_matrix
+1,KNeighborsClassifier(n_neighbors=3),"('petal_length', 'sepal_length')",2,16.3596049,1597.41015625,0.9599331662489557,0.96,0.9773333333333334,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  1  9]]"
+4,QuadraticDiscriminantAnalysis(),"('petal_length', 'sepal_length')",2,16.7324414,1597.55078125,0.9532832080200503,0.9533333333333334,0.9953333333333333,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  2  8]]"
+5,KNeighborsClassifier(n_neighbors=3),"('petal_length',)",1,16.852693799999997,1597.94140625,0.9330649856965646,0.9333333333333332,0.9673333333333332,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  0 10]]"
+2,KNeighborsClassifier(n_neighbors=3),"('petal_length', 'sepal_width', 'sepal_length')",3,16.60142300000001,1597.390625,0.9262459178248651,0.9266666666666665,0.9836666666666666,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  0 10]]"
+3,DecisionTreeClassifier(max_depth=5),"('petal_length', 'sepal_width', 'sepal_length')",3,16.447045399999993,1597.26953125,0.9060893495460732,0.9199999999999999,0.9513333333333334,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  0 10]]"
+0,"XGBClassifier(base_score=0.5, booster='gbtree', colsample_bylevel=1,
+              colsample_bynode=1, colsample_bytree=1, enable_categorical=False,
+              eval_metric='mlogloss', gamma=0, gpu_id=-1, importance_type=None,
+              interaction_constraints='', learning_rate=0.300000012,
+              max_delta_step=0, max_depth=4, min_child_weight=1, missing=nan,
+              monotone_constraints='()', n_estimators=150, n_jobs=12,
+              num_parallel_tree=1, objective='multi:softprob', predictor='auto',
+              random_state=0, reg_alpha=0, reg_lambda=1, scale_pos_weight=None,
+              subsample=1, tree_method='exact', use_label_encoder=False,
+              validate_parameters=1, ...)","('sepal_width', 'sepal_length')",2,9.551481099999997,1598.3828125,,,,"[[10  0  0]
+ [ 0  6  4]
+ [ 0  3  7]]"
