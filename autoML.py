@@ -443,13 +443,19 @@ class AutoML:
         n_train_sets = int(n_train_sets)        
         
         #pre-training with all features and all algorithms
+        '''
+        Parallel(n_jobs=-1, backend="multiprocessing")(delayed(evaluation)
+                                                       (individual, n_bits_algos, selected_algos, self.X_bitmap, self.X_train, self.X_valid
+                                                        , self.y_train, self.y_valid, self.X, self.y, self.__results, main_metric
+                                                        , self.YisCategorical(), self.__metrics_regression_list, self.__metrics_classification_list) 
+                                                       for individual in gen_first_people(self.X_train.shape[1], len(selected_algos), n_bits_algos))
         for individual in gen_first_people(self.X_train.shape[1], len(selected_algos), n_bits_algos):
             #print(individual)
             evaluation(individual, n_bits_algos, selected_algos, self.X_bitmap, self.X_train, self.X_valid
                             , self.y_train, self.y_valid, self.X, self.y, self.__results, main_metric
                             , self.YisCategorical(), self.__metrics_regression_list, self.__metrics_classification_list
                             )
-        
+        '''
         toolbox = ga_toolbox(n_cols, n_bits_algos, selected_algos
                , self.X_bitmap, self.X_train, self.X_valid, self.y_train, self.y_valid, self.X, self.y, self.__results, main_metric
                , self.YisCategorical(), self.__metrics_regression_list, self.__metrics_classification_list)
