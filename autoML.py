@@ -73,7 +73,7 @@ def features_corr_level_X(i, X_0, X_i, threshold):
     #else: feature ok, no redundance
     return i
 
-def evalOneMax(individual, n_bits_algos, selected_algos
+def evaluation(individual, n_bits_algos, selected_algos
                , X_bitmap, X_train, X_valid, y_train, y_valid, X, y, __results, main_metric
                , YisCategorical, __metrics_regression_list, __metrics_classification_list):
     def float2bigint(float_value):
@@ -164,12 +164,25 @@ def ga_toolbox(n_cols, n_bits_algos, selected_algos
         toolbox.register("map", pool.map)     
 
     #genetics algorithm: initialization
-    toolbox.register("attr_bool", random.randint, 0, 1)
-    toolbox.register("individual", tools.initRepeat, creator.Individual, toolbox.attr_bool, n=n_cols)
-    toolbox.register("population", tools.initRepeat, list, toolbox.individual)
+    #toolbox.register("attr_bool", random.randint, 0, 1)
+    #toolbox.register("individual", tools.initRepeat, creator.Individual, toolbox.attr_bool, n=n_cols)
+    #toolbox.register("population", tools.initRepeat, list, toolbox.individual)
+    def initPopulation(pcls, ind_init):
+        pop = []
+        X_bitmap = bautil.int2ba(1, X_train.shape[1])
+        X_bitmap.setall(1)
+        for i in range(len(selected_algos)):
+            c_bitmap = list()
+            c_bitmap.extend(list(X_bitmap))
+            c_bitmap.extend(list(bautil.int2ba(i, n_bits_algos)))
+            pop.append(c_bitmap)
+        return pcls(ind_init(c) for c in pop)
+    
+    toolbox.register("population", initPopulation, list, creator.Individual)
+
     
     #genetics algorithm: operators
-    toolbox.register("evaluate", evalOneMax, n_bits_algos=n_bits_algos, selected_algos=selected_algos
+    toolbox.register("evaluate", evaluation, n_bits_algos=n_bits_algos, selected_algos=selected_algos
             , X_bitmap=X_bitmap, X_train=X_train, X_valid=X_valid, y_train=y_train
             , y_valid=y_valid, X=X, y=y, __results=__results, main_metric=main_metric
             , YisCategorical=YisCategorical, __metrics_regression_list=__metrics_regression_list
@@ -186,7 +199,7 @@ class AutoML:
         KNeighborsClassifier(3),
         #SVC(kernel="linear", C=0.025),
         #SVC(gamma=2, C=1),
-        svm.SVC(probability=True),
+        SVC(probability=True),
         GaussianProcessClassifier(1.0 * RBF(1.0)),
         DecisionTreeClassifier(max_depth=5),
         RandomForestClassifier(max_depth=5, n_estimators=10, max_features=1),
@@ -194,7 +207,8 @@ class AutoML:
         AdaBoostClassifier(),
         GaussianNB(),
         QuadraticDiscriminantAnalysis(),
-        XGBClassifier(n_estimators=150, max_depth=4, use_label_encoder=False, eval_metric='mlogloss'),
+        #XGBClassifier(n_estimators=150, max_depth=4, use_label_encoder=False, eval_metric='mlogloss', error_score='raise'),
+        XGBClassifier(),
         #regressors        
         XGBRegressor(),
         XGBRFRegressor(),
@@ -426,7 +440,7 @@ class AutoML:
                , self.YisCategorical(), self.__metrics_regression_list, self.__metrics_classification_list)
         #algorithms.eaSimple(toolbox.population(n=n_train_sets), toolbox, cxpb=0.5, mutpb=0.2, ngen=10, verbose=False)
         #algorithms.eaSimple(toolbox.population(n=int(0.01*n_train_sets*len(selected_algos))), toolbox, cxpb=0.5, mutpb=0.2, ngen=10, verbose=False)
-        algorithms.eaSimple(toolbox.population(n=5), toolbox, cxpb=0.5, mutpb=0.2, ngen=10, verbose=False)
+        algorithms.eaSimple(toolbox.population(), toolbox, cxpb=0.5, mutpb=0.2, ngen=10, verbose=False)
         
         #preparing the results
         self.__results.sort_values(by=main_metric, ascending=False, inplace=True)
@@ -503,5 +517,5 @@ if __name__ == '__main__':
     automl = AutoML(util.getDSIris(), 'class'
                     , min_x_y_correlation_rate=0.01
                     , pool=pool
-                    , ds_name='iris')
+                    , ds_name='iris_v-seeding-pop')
     print(automl.getBestResult())
