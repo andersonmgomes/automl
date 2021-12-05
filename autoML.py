@@ -112,9 +112,9 @@ def evaluation(individual, n_bits_algos, selected_algos
         
         log_msg = '   *Model trained: ' + str(scoring_list[0]) 
         log_msg += ' = {:.5f}'.format(metrics_value_list[0]) 
-        log_msg += ' - ' + str(len(x_cols)) + ' features' 
-        log_msg += ' - ' + str(model)[:str(model).find('(')+5] 
-        log_msg += ' - ' + str(x_cols)
+        log_msg += ' | ' + str(len(x_cols)) + ' features' 
+        log_msg += ' | ' + str(model)[:str(model).find('(')+5] 
+        log_msg += ' | ' + str(x_cols)
                 
         print(log_msg[:150].replace('\n',''))#show only the 150 first caracteres
         
@@ -139,11 +139,13 @@ def evaluation(individual, n_bits_algos, selected_algos
     #else 
                 
     t0 = time.perf_counter()
-    mem_max, score_result = memory_usage(proc=(__score_dataset, (algo, col_tuple, X_train, X_valid
-                                                                 , y_train, y_valid, X, y, YisCategorical
-                                                                 , __metrics_regression_list, __metrics_classification_list))
-                                         , max_usage=True
-                                            , retval=True, include_children=True)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        mem_max, score_result = memory_usage(proc=(__score_dataset, (algo, col_tuple, X_train, X_valid
+                                                                    , y_train, y_valid, X, y, YisCategorical
+                                                                    , __metrics_regression_list, __metrics_classification_list))
+                                            , max_usage=True
+                                                , retval=True, include_children=True)
     __results.loc[len(__results)] = np.concatenate((np.array([str(algo), col_tuple
                                                                         , int(len(col_tuple))
                                                                         , (time.perf_counter() - t0)
@@ -208,7 +210,7 @@ class AutoML:
         GaussianNB(),
         QuadraticDiscriminantAnalysis(),
         #XGBClassifier(n_estimators=150, max_depth=4, use_label_encoder=False, eval_metric='mlogloss', error_score='raise'),
-        XGBClassifier(),
+        XGBClassifier(use_label_encoder=False, eval_metric='mlogloss'),
         #regressors        
         XGBRegressor(),
         XGBRFRegressor(),
@@ -225,7 +227,8 @@ class AutoML:
                  , min_x_y_correlation_rate = 0.01
                  , n_features_threshold = 1
                  , pool = None
-                 , ds_name = None) -> None:
+                 , ds_name = None
+                 , ngen = 10) -> None:
         #ray.init(ignore_reinit_error=True)
         #initializing variables
         self.__results = None
@@ -238,6 +241,7 @@ class AutoML:
         self.__n_features_threshold = n_features_threshold #TODO: N_FEATURES_THRESHOLD: define this value dynamically
         self.__RANDOM_STATE = 1102
         self.ds_name = ds_name
+        self.ngen = ngen
         
         print('Original dataset dimensions:', ds_source.shape)
         #NaN values
@@ -440,7 +444,7 @@ class AutoML:
                , self.YisCategorical(), self.__metrics_regression_list, self.__metrics_classification_list)
         #algorithms.eaSimple(toolbox.population(n=n_train_sets), toolbox, cxpb=0.5, mutpb=0.2, ngen=10, verbose=False)
         #algorithms.eaSimple(toolbox.population(n=int(0.01*n_train_sets*len(selected_algos))), toolbox, cxpb=0.5, mutpb=0.2, ngen=10, verbose=False)
-        algorithms.eaSimple(toolbox.population(), toolbox, cxpb=0.5, mutpb=0.2, ngen=10, verbose=False)
+        algorithms.eaSimple(toolbox.population(), toolbox, cxpb=0.5, mutpb=0.2, ngen=self.ngen, verbose=False)
         
         #preparing the results
         self.__results.sort_values(by=main_metric, ascending=False, inplace=True)
@@ -517,5 +521,6 @@ if __name__ == '__main__':
     automl = AutoML(util.getDSIris(), 'class'
                     , min_x_y_correlation_rate=0.01
                     , pool=pool
-                    , ds_name='iris_v-seeding-pop')
+                    , ngen=100
+                    , ds_name='iris_ngen100')
     print(automl.getBestResult())
