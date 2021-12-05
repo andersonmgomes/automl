@@ -120,6 +120,8 @@ def evaluation(individual, n_bits_algos, selected_algos
             float_value = -1
         return [int(float_value*100000)]
     
+    print(individual)
+    
     algo = individual[-n_bits_algos:]
     algo = bautil.ba2int(bitarray(algo)) % len(selected_algos)
     
@@ -152,6 +154,16 @@ def evaluation(individual, n_bits_algos, selected_algos
                                                             , score_result))
     return float2bigint(score_result[0])
 
+def gen_first_people(n_features, n_algos, n_bits_algos):
+    first_people = []
+    X_bitmap = bautil.int2ba(1, n_features)
+    X_bitmap.setall(1)
+    for i in range(n_algos):
+        c_bitmap = []
+        c_bitmap.extend(list(X_bitmap))
+        c_bitmap.extend(list(bautil.int2ba(i, n_bits_algos)))
+        first_people.append(c_bitmap)
+    return first_people
 
 def ga_toolbox(n_cols, n_bits_algos, selected_algos
                , X_bitmap, X_train, X_valid, y_train, y_valid, X, y, __results, main_metric
@@ -169,15 +181,7 @@ def ga_toolbox(n_cols, n_bits_algos, selected_algos
     #toolbox.register("individual", tools.initRepeat, creator.Individual, toolbox.attr_bool, n=n_cols)
     #toolbox.register("population", tools.initRepeat, list, toolbox.individual)
     def initPopulation(pcls, ind_init):
-        pop = []
-        X_bitmap = bautil.int2ba(1, X_train.shape[1])
-        X_bitmap.setall(1)
-        for i in range(len(selected_algos)):
-            c_bitmap = list()
-            c_bitmap.extend(list(X_bitmap))
-            c_bitmap.extend(list(bautil.int2ba(i, n_bits_algos)))
-            pop.append(c_bitmap)
-        return pcls(ind_init(c) for c in pop)
+        return pcls(ind_init(c) for c in gen_first_people(X_train.shape[1], len(selected_algos), n_bits_algos))
     
     toolbox.register("population", initPopulation, list, creator.Individual)
 
@@ -437,6 +441,14 @@ class AutoML:
             n_train_sets = self.X_train.shape[1]
 
         n_train_sets = int(n_train_sets)        
+        
+        #pre-training with all features and all algorithms
+        for individual in gen_first_people(self.X_train.shape[1], len(selected_algos), n_bits_algos):
+            #print(individual)
+            evaluation(individual, n_bits_algos, selected_algos, self.X_bitmap, self.X_train, self.X_valid
+                            , self.y_train, self.y_valid, self.X, self.y, self.__results, main_metric
+                            , self.YisCategorical(), self.__metrics_regression_list, self.__metrics_classification_list
+                            )
         
         toolbox = ga_toolbox(n_cols, n_bits_algos, selected_algos
                , self.X_bitmap, self.X_train, self.X_valid, self.y_train, self.y_valid, self.X, self.y, self.__results, main_metric

@@ -1,0 +1,67 @@
+train_order,algorithm,features,n_features,train_time,mem_max,f1_weighted,accuracy,roc_auc_ovr_weighted,confusion_matrix
+16,QuadraticDiscriminantAnalysis(),"('petal_length', 'sepal_width')",2,21.27497360000001,1621.0703125,0.9530472646262119,0.9533333333333334,0.9943333333333333,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  1  9]]"
+14,QuadraticDiscriminantAnalysis(),"('petal_length', 'sepal_length')",2,21.591791099999966,1620.86328125,0.9530138477506899,0.9533333333333334,0.998,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  2  8]]"
+8,QuadraticDiscriminantAnalysis(),"('petal_length', 'sepal_width', 'sepal_length')",3,22.15357929999999,1610.9765625,0.9463638895217843,0.9466666666666667,0.9973333333333333,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  2  8]]"
+13,QuadraticDiscriminantAnalysis(),"('petal_length',)",1,21.585239399999978,1621.00390625,0.9461227664215954,0.9466666666666667,0.9943333333333333,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  1  9]]"
+2,GaussianProcessClassifier(kernel=1**2 * RBF(length_scale=1)),"('petal_length', 'sepal_width', 'sepal_length')",3,40.0889646,1613.01171875,0.9460549200379594,0.9466666666666667,0.9893333333333333,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  1  9]]"
+11,SVC(probability=True),"('petal_length', 'sepal_length')",2,21.315360499999997,1621.21484375,0.9460549200379594,0.9466666666666667,0.998,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  1  9]]"
+0,KNeighborsClassifier(n_neighbors=3),"('petal_length', 'sepal_width', 'sepal_length')",3,26.453958200000002,1594.0390625,0.9460215031624374,0.9466666666666667,0.985,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  1  9]]"
+1,SVC(probability=True),"('petal_length', 'sepal_width', 'sepal_length')",3,15.9909155,1594.578125,0.9454887218045112,0.9466666666666667,0.9959999999999999,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  2  8]]"
+18,KNeighborsClassifier(n_neighbors=3),"('petal_length', 'sepal_width')",2,25.6117701,1620.98046875,0.9398496240601503,0.9400000000000001,0.9793333333333333,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  1  9]]"
+5,"MLPClassifier(alpha=1, max_iter=1000)","('petal_length', 'sepal_width', 'sepal_length')",3,20.1805229,1610.62890625,0.9264818612187034,0.9333333333333333,0.9899999999999999,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  1  9]]"
+4,"RandomForestClassifier(max_depth=5, max_features=1, n_estimators=10)","('petal_length', 'sepal_width', 'sepal_length')",3,11.2582539,1610.62890625,0.9199189893926736,0.9333333333333333,0.9748333333333334,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  1  9]]"
+3,DecisionTreeClassifier(max_depth=5),"('petal_length', 'sepal_width', 'sepal_length')",3,21.396659700000015,1610.51953125,0.9192880027447264,0.9199999999999999,0.9476666666666669,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  2  8]]"
+7,GaussianNB(),"('petal_length', 'sepal_width', 'sepal_length')",3,21.602466500000048,1610.71875,0.8785092105862061,0.8800000000000001,0.9833333333333334,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  3  7]]"
+17,LogisticRegression(),"('petal_length', 'sepal_length')",2,11.831642200000033,1621.04296875,0.849471211548207,0.8533333333333333,0.9683333333333334,"[[10  0  0]
+ [ 0  8  2]
+ [ 0  1  9]]"
+10,LogisticRegression(),"('petal_length', 'sepal_width', 'sepal_length')",3,11.075529500000016,1620.80859375,0.8441324859463236,0.8466666666666667,0.9646666666666667,"[[10  0  0]
+ [ 0  6  4]
+ [ 0  2  8]]"
+12,QuadraticDiscriminantAnalysis(),"('sepal_width', 'sepal_length')",2,21.096834700000045,1621.29296875,0.7717697273486748,0.7733333333333333,0.921,"[[10  0  0]
+ [ 0  6  4]
+ [ 0  4  6]]"
+6,AdaBoostClassifier(),"('petal_length', 'sepal_width', 'sepal_length')",3,13.001448399999987,1610.8125,0.7510442773600668,0.7866666666666666,0.9663333333333334,"[[10  0  0]
+ [ 0 10  0]
+ [ 0 10  0]]"
+15,KNeighborsClassifier(n_neighbors=3),"('sepal_width', 'sepal_length')",2,21.954797100000008,1621.0078125,0.7311012489502191,0.7333333333333333,0.8651666666666668,"[[10  0  0]
+ [ 0  5  5]
+ [ 0  1  9]]"
+9,"XGBClassifier(base_score=0.5, booster='gbtree', colsample_bylevel=1,
+              colsample_bynode=1, colsample_bytree=1, enable_categorical=False,
+              eval_metric='mlogloss', gamma=0, gpu_id=-1, importance_type=None,
+              interaction_constraints='', learning_rate=0.300000012,
+              max_delta_step=0, max_depth=6, min_child_weight=1, missing=nan,
+              monotone_constraints='()', n_estimators=100, n_jobs=12,
+              num_parallel_tree=1, objective='multi:softprob', predictor='auto',
+              random_state=0, reg_alpha=0, reg_lambda=1, scale_pos_weight=None,
+              subsample=1, tree_method='exact', use_label_encoder=False,
+              validate_parameters=1, ...)","('petal_length', 'sepal_width', 'sepal_length')",3,11.905728300000021,1620.80859375,,,,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  2  8]]"
