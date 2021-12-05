@@ -73,6 +73,45 @@ def features_corr_level_X(i, X_0, X_i, threshold):
     #else: feature ok, no redundance
     return i
 
+def __score_dataset(model, x_cols, X_train, X_valid, y_train, y_valid, X, y
+                    , YisCategorical, __metrics_regression_list, __metrics_classification_list):
+    
+    X_train2 = X_train[list(x_cols)]
+    X_valid2 = X_valid[list(x_cols)]
+    
+    if len(x_cols)==1:
+        X_train2 = np.asanyarray(X_train2).reshape(-1, 1)
+        X_valid2 = np.asanyarray(X_valid2).reshape(-1, 1)
+
+    scoring_list = __metrics_regression_list
+    if YisCategorical:
+        scoring_list = __metrics_classification_list
+    
+    metrics_value_list = []
+    
+    for scor in scoring_list:
+        metrics_value_list.append(np.mean(cross_val_score(model, X[list(x_cols)], y, cv=5, scoring=scor)))
+    
+    result_list = metrics_value_list
+
+    model.fit(X_train2, y_train)
+    if YisCategorical:
+        #confusion matrix
+        result_list.append(confusion_matrix(y_valid, model.predict(X_valid2)))
+
+    #model
+    result_list.append(model)
+    
+    log_msg = '   *Model trained: ' + str(scoring_list[0]) 
+    log_msg += ' = {:.5f}'.format(metrics_value_list[0]) 
+    log_msg += ' | ' + str(len(x_cols)) + ' features' 
+    log_msg += ' | ' + str(model)[:str(model).find('(')+5] 
+    log_msg += ' | ' + str(x_cols)
+            
+    print(log_msg[:150].replace('\n',''))#show only the 150 first caracteres
+    
+    return np.array(result_list, dtype=object)
+
 def evaluation(individual, n_bits_algos, selected_algos
                , X_bitmap, X_train, X_valid, y_train, y_valid, X, y, __results, main_metric
                , YisCategorical, __metrics_regression_list, __metrics_classification_list):
@@ -81,46 +120,6 @@ def evaluation(individual, n_bits_algos, selected_algos
             float_value = -1
         return [int(float_value*100000)]
     
-    def __score_dataset(model, x_cols, X_train, X_valid, y_train, y_valid, X, y
-                        , YisCategorical, __metrics_regression_list, __metrics_classification_list):
-        
-        X_train2 = X_train[list(x_cols)]
-        X_valid2 = X_valid[list(x_cols)]
-        
-        if len(x_cols)==1:
-            X_train2 = np.asanyarray(X_train2).reshape(-1, 1)
-            X_valid2 = np.asanyarray(X_valid2).reshape(-1, 1)
-
-        scoring_list = __metrics_regression_list
-        if YisCategorical:
-            scoring_list = __metrics_classification_list
-        
-        metrics_value_list = []
-        
-        for scor in scoring_list:
-            metrics_value_list.append(np.mean(cross_val_score(model, X[list(x_cols)], y, cv=5, scoring=scor)))
-        
-        result_list = metrics_value_list
-
-        model.fit(X_train2, y_train)
-        if YisCategorical:
-            #confusion matrix
-            result_list.append(confusion_matrix(y_valid, model.predict(X_valid2)))
-
-        #model
-        result_list.append(model)
-        
-        log_msg = '   *Model trained: ' + str(scoring_list[0]) 
-        log_msg += ' = {:.5f}'.format(metrics_value_list[0]) 
-        log_msg += ' | ' + str(len(x_cols)) + ' features' 
-        log_msg += ' | ' + str(model)[:str(model).find('(')+5] 
-        log_msg += ' | ' + str(x_cols)
-                
-        print(log_msg[:150].replace('\n',''))#show only the 150 first caracteres
-        
-        return np.array(result_list, dtype=object)
-
-
     algo = individual[-n_bits_algos:]
     algo = bautil.ba2int(bitarray(algo)) % len(selected_algos)
     
@@ -444,7 +443,8 @@ class AutoML:
                , self.YisCategorical(), self.__metrics_regression_list, self.__metrics_classification_list)
         #algorithms.eaSimple(toolbox.population(n=n_train_sets), toolbox, cxpb=0.5, mutpb=0.2, ngen=10, verbose=False)
         #algorithms.eaSimple(toolbox.population(n=int(0.01*n_train_sets*len(selected_algos))), toolbox, cxpb=0.5, mutpb=0.2, ngen=10, verbose=False)
-        algorithms.eaSimple(toolbox.population(), toolbox, cxpb=0.5, mutpb=0.2, ngen=self.ngen, verbose=False)
+        #algorithms.eaSimple(toolbox.population(), toolbox, cxpb=0.5, mutpb=0.2, ngen=self.ngen, verbose=False)
+        algorithms.eaSimple(toolbox.population(), toolbox, cxpb=0.8, mutpb=0.3, ngen=self.ngen, verbose=False)
         
         #preparing the results
         self.__results.sort_values(by=main_metric, ascending=False, inplace=True)
@@ -521,6 +521,6 @@ if __name__ == '__main__':
     automl = AutoML(util.getDSIris(), 'class'
                     , min_x_y_correlation_rate=0.01
                     , pool=pool
-                    , ngen=100
-                    , ds_name='iris_ngen100')
+                    , ngen=10
+                    , ds_name='iris_mut3')
     print(automl.getBestResult())
