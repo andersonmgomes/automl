@@ -1,0 +1,61 @@
+train_order,algorithm,features,n_features,train_time,mem_max,f1_weighted,accuracy,roc_auc_ovr_weighted,confusion_matrix
+0,KNeighborsClassifier(n_neighbors=3),"('petal_length', 'sepal_width', 'sepal_length')",3,12.035563099999997,1380.31640625,0.928888888888889,0.9333333333333333,0.925,"[[10  0  0]
+ [ 0  8  2]
+ [ 0  1  9]]"
+7,GaussianNB(),"('petal_length', 'sepal_width', 'sepal_length')",3,11.998745400000004,1385.65625,0.8977777777777778,0.9,0.9666666666666666,"[[10  0  0]
+ [ 0  8  2]
+ [ 0  1  9]]"
+4,RandomForestClassifier(),"('petal_length', 'sepal_width', 'sepal_length')",3,7.5622042999999906,1385.16796875,0.8933333333333333,0.8666666666666666,0.9083333333333332,"[[10  0  0]
+ [ 0  8  2]
+ [ 0  0 10]]"
+2,GaussianProcessClassifier(kernel=1**2 * RBF(length_scale=1)),"('petal_length', 'sepal_width', 'sepal_length')",3,8.863196699999996,1385.3671875,0.8622222222222222,0.8666666666666666,0.95,"[[10  0  0]
+ [ 0  8  2]
+ [ 0  1  9]]"
+3,DecisionTreeClassifier(),"('petal_length', 'sepal_width', 'sepal_length')",3,17.920121999999992,1385.30859375,0.8622222222222222,0.8333333333333334,0.9,"[[10  0  0]
+ [ 0  8  2]
+ [ 0  0 10]]"
+5,"MLPClassifier(alpha=1, max_iter=1000)","('petal_length', 'sepal_width', 'sepal_length')",3,8.362195799999995,1385.42578125,0.8622222222222222,0.8666666666666666,0.9833333333333332,"[[10  0  0]
+ [ 0  8  2]
+ [ 0  0 10]]"
+1,SVC(probability=True),"('petal_length', 'sepal_width', 'sepal_length')",3,12.051263199999994,1380.60546875,0.8622222222222222,0.8666666666666666,0.9666666666666666,"[[10  0  0]
+ [ 0  8  2]
+ [ 0  0 10]]"
+9,"XGBClassifier(base_score=0.5, booster='gbtree', colsample_bylevel=1,
+              colsample_bynode=1, colsample_bytree=1, enable_categorical=False,
+              eval_metric='mlogloss', gamma=0, gpu_id=-1, importance_type=None,
+              interaction_constraints='', learning_rate=0.300000012,
+              max_delta_step=0, max_depth=6, min_child_weight=1, missing=nan,
+              monotone_constraints='()', n_estimators=100, n_jobs=12,
+              num_parallel_tree=1, objective='multi:softprob', predictor='auto',
+              random_state=0, reg_alpha=0, reg_lambda=1, scale_pos_weight=None,
+              subsample=1, tree_method='exact', use_label_encoder=False,
+              validate_parameters=1, ...)","('petal_length', 'sepal_width', 'sepal_length')",3,7.588188900000006,1395.5078125,0.8600000000000001,0.8666666666666668,0.875,"[[10  0  0]
+ [ 0  8  2]
+ [ 0  0 10]]"
+6,AdaBoostClassifier(),"('petal_length', 'sepal_width', 'sepal_length')",3,6.7387992000000025,1385.5625,0.8400000000000001,0.8666666666666666,0.9166666666666667,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  8  2]]"
+15,DecisionTreeClassifier(),"('petal_length', 'sepal_width')",2,18.073472600000002,1396.5234375,0.8222222222222222,0.8333333333333334,0.875,"[[10  0  0]
+ [ 0  8  2]
+ [ 0  0 10]]"
+14,GaussianNB(),"('petal_length', 'sepal_width')",2,12.542872399999993,1396.12109375,0.8088888888888889,0.8333333333333333,0.9666666666666666,"[[10  0  0]
+ [ 0  8  2]
+ [ 0  1  9]]"
+8,QuadraticDiscriminantAnalysis(),"('petal_length', 'sepal_width', 'sepal_length')",3,18.8196334,1385.921875,0.8044444444444444,0.8333333333333334,0.9,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  1  9]]"
+13,LogisticRegression(),"('petal_length', 'sepal_width', 'sepal_length')",3,12.125241400000021,1396.0234375,0.7911111111111112,0.8,0.925,"[[10  0  0]
+ [ 0  8  2]
+ [ 0  2  8]]"
+11,GradientBoostingClassifier(),"('petal_length', 'sepal_width', 'sepal_length')",3,8.150801000000001,1395.69921875,0.7733333333333333,0.8,0.875,"[[10  0  0]
+ [ 0  8  2]
+ [ 0  0 10]]"
+16,SVC(probability=True),"('sepal_width', 'sepal_length')",2,12.011295700000005,1396.28125,0.7066666666666667,0.7333333333333333,0.9083333333333332,"[[10  0  0]
+ [ 0  7  3]
+ [ 0  3  7]]"
+10,MultinomialNB(),"('petal_length', 'sepal_width', 'sepal_length')",3,18.39381800000001,1395.66796875,0.671111111111111,0.7,0.8083333333333333,"[[10  0  0]
+ [ 0  4  6]
+ [ 0  2  8]]"
+12,HistGradientBoostingClassifier(),"('petal_length', 'sepal_width', 'sepal_length')",3,9.410850400000015,1396.36328125,0.16666666666666666,0.3333333333333333,0.5,"[[10  0  0]
+ [ 0  8  2]
+ [ 0  0 10]]"

@@ -1,3 +1,4 @@
+from re import escape
 from numpy.core.numeric import Infinity, NaN
 import pandas as pd 
 #import modin.pandas as pd #https://modin.readthedocs.io/
@@ -30,7 +31,6 @@ import random
 from sklearn.gaussian_process import GaussianProcessClassifier
 from sklearn.gaussian_process.kernels import RBF
 from sklearn.tree import DecisionTreeClassifier
-from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
 from sklearn.naive_bayes import GaussianNB
 from xgboost import XGBClassifier, XGBRegressor, XGBRFRegressor
 from sklearn.neural_network import MLPClassifier
@@ -42,9 +42,12 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
+from sklearn.naive_bayes import MultinomialNB
 from scoop import futures
 from datetime import datetime
 import math
+from sklearn.ensemble import BaggingClassifier, GradientBoostingClassifier, GradientBoostingRegressor, HistGradientBoostingClassifier
+from sklearn.ensemble import VotingClassifier, StackingClassifier
 
 def features_corr_level_Y(i, X, y, threshold):
     #features engineering
@@ -90,7 +93,7 @@ def __score_dataset(model, x_cols, X_train, X_valid, y_train, y_valid, X, y
     metrics_value_list = []
     
     for scor in scoring_list:
-        metrics_value_list.append(np.mean(cross_val_score(model, X[list(x_cols)], y, cv=5, scoring=scor)))
+        metrics_value_list.append(np.mean(cross_val_score(model, X_valid2, y_valid, cv=5, scoring=scor)))
     
     result_list = metrics_value_list
 
@@ -105,7 +108,7 @@ def __score_dataset(model, x_cols, X_train, X_valid, y_train, y_valid, X, y
     log_msg = '   *Model trained: ' + str(scoring_list[0]) 
     log_msg += ' = {:.5f}'.format(metrics_value_list[0]) 
     log_msg += ' | ' + str(len(x_cols)) + ' features' 
-    log_msg += ' | ' + str(model)[:str(model).find('(')+5] 
+    log_msg += ' | ' + str(model)[:str(model).find('(')] 
     log_msg += ' | ' + str(x_cols)
             
     print(log_msg[:150].replace('\n',''))#show only the 150 first caracteres
@@ -120,7 +123,7 @@ def evaluation(individual, n_bits_algos, selected_algos
             float_value = -1
         return [int(float_value*100000)]
     
-    print(individual)
+    #print(individual)
     
     algo = individual[-n_bits_algos:]
     algo = bautil.ba2int(bitarray(algo)) % len(selected_algos)
@@ -133,8 +136,24 @@ def evaluation(individual, n_bits_algos, selected_algos
     if len(col_tuple)==0:
         return float2bigint(-1)
     
+    def is_ensemble(a):
+        return isinstance(a, VotingClassifier) or isinstance(a, StackingClassifier)
+    
+    if is_ensemble(algo):
+        #getting the top 3 best results group by algorithm
+        best_estimators = []
+        __results.sort_values(by=main_metric, ascending=False, inplace=True)
+        for row in __results.iterrows():
+            if len(best_estimators)==3:
+                break
+            candidate_algo = row[1]['algorithm']
+            if ((candidate_algo not in best_estimators)
+                and (not is_ensemble(candidate_algo))):
+                best_estimators.append(candidate_algo)
+        algo.estimators = list(zip([str(x) for x in best_estimators],best_estimators))
+
     #seeking for some previous result
-    previous_result = __results[(__results['algorithm']==str(algo)) & (__results['features'].apply(str)==str(col_tuple))]
+    previous_result = __results[(__results['algorithm'] == algo) & (__results['features'].apply(str)==str(col_tuple))]
     if previous_result.shape[0]>0:
         return float2bigint(previous_result[main_metric])
     #else 
@@ -147,7 +166,7 @@ def evaluation(individual, n_bits_algos, selected_algos
                                                                     , __metrics_regression_list, __metrics_classification_list))
                                             , max_usage=True
                                                 , retval=True, include_children=True)
-    __results.loc[len(__results)] = np.concatenate((np.array([str(algo), col_tuple
+    __results.loc[len(__results)] = np.concatenate((np.array([algo, col_tuple
                                                                         , int(len(col_tuple))
                                                                         , (time.perf_counter() - t0)
                                                                         , mem_max], dtype=object)
@@ -177,14 +196,9 @@ def ga_toolbox(n_cols, n_bits_algos, selected_algos
         toolbox.register("map", pool.map)     
 
     #genetics algorithm: initialization
-    #toolbox.register("attr_bool", random.randint, 0, 1)
-    #toolbox.register("individual", tools.initRepeat, creator.Individual, toolbox.attr_bool, n=n_cols)
-    #toolbox.register("population", tools.initRepeat, list, toolbox.individual)
     def initPopulation(pcls, ind_init):
         return pcls(ind_init(c) for c in gen_first_people(X_train.shape[1], len(selected_algos), n_bits_algos))
-    
     toolbox.register("population", initPopulation, list, creator.Individual)
-
     
     #genetics algorithm: operators
     toolbox.register("evaluate", evaluation, n_bits_algos=n_bits_algos, selected_algos=selected_algos
@@ -193,7 +207,7 @@ def ga_toolbox(n_cols, n_bits_algos, selected_algos
             , YisCategorical=YisCategorical, __metrics_regression_list=__metrics_regression_list
             , __metrics_classification_list=__metrics_classification_list)
     toolbox.register("mate", tools.cxTwoPoint)
-    toolbox.register("mutate", tools.mutFlipBit, indpb=0.05)
+    toolbox.register("mutate", tools.mutFlipBit, indpb=0.1)
     toolbox.register("select", tools.selTournament, tournsize=3)
     return toolbox
 
@@ -201,19 +215,21 @@ class AutoML:
     ALGORITHMS = [
         #classifiers
         #https://scikit-learn.org/stable/auto_examples/classification/plot_classifier_comparison.html
-        KNeighborsClassifier(3),
-        #SVC(kernel="linear", C=0.025),
-        #SVC(gamma=2, C=1),
+        KNeighborsClassifier(),
         SVC(probability=True),
-        GaussianProcessClassifier(1.0 * RBF(1.0)),
-        DecisionTreeClassifier(max_depth=5),
-        RandomForestClassifier(max_depth=5, n_estimators=10, max_features=1),
-        MLPClassifier(alpha=1, max_iter=1000),
+        GaussianProcessClassifier(),
+        DecisionTreeClassifier(),
+        RandomForestClassifier(n_jobs=-1),
+        MLPClassifier(),
         AdaBoostClassifier(),
         GaussianNB(),
         QuadraticDiscriminantAnalysis(),
-        #XGBClassifier(n_estimators=150, max_depth=4, use_label_encoder=False, eval_metric='mlogloss', error_score='raise'),
         XGBClassifier(use_label_encoder=False, eval_metric='mlogloss'),
+        MultinomialNB(), 
+        GradientBoostingClassifier(),
+        HistGradientBoostingClassifier(),
+        VotingClassifier(estimators=[], n_jobs=-1),
+        StackingClassifier(estimators=[], n_jobs=-1),
         #regressors        
         XGBRegressor(),
         XGBRFRegressor(),
@@ -221,7 +237,8 @@ class AutoML:
         svm.SVR(),
         tree.DecisionTreeRegressor(),
         neighbors.KNeighborsRegressor(),
-        linear_model.LogisticRegression()    
+        linear_model.LogisticRegression(),
+        GradientBoostingRegressor(),    
     ]    
     
     def __init__(self, ds_source, y_colname = 'y'
@@ -442,26 +459,10 @@ class AutoML:
 
         n_train_sets = int(n_train_sets)        
         
-        #pre-training with all features and all algorithms
-        '''
-        Parallel(n_jobs=-1, backend="multiprocessing")(delayed(evaluation)
-                                                       (individual, n_bits_algos, selected_algos, self.X_bitmap, self.X_train, self.X_valid
-                                                        , self.y_train, self.y_valid, self.X, self.y, self.__results, main_metric
-                                                        , self.YisCategorical(), self.__metrics_regression_list, self.__metrics_classification_list) 
-                                                       for individual in gen_first_people(self.X_train.shape[1], len(selected_algos), n_bits_algos))
-        for individual in gen_first_people(self.X_train.shape[1], len(selected_algos), n_bits_algos):
-            #print(individual)
-            evaluation(individual, n_bits_algos, selected_algos, self.X_bitmap, self.X_train, self.X_valid
-                            , self.y_train, self.y_valid, self.X, self.y, self.__results, main_metric
-                            , self.YisCategorical(), self.__metrics_regression_list, self.__metrics_classification_list
-                            )
-        '''
         toolbox = ga_toolbox(n_cols, n_bits_algos, selected_algos
                , self.X_bitmap, self.X_train, self.X_valid, self.y_train, self.y_valid, self.X, self.y, self.__results, main_metric
                , self.YisCategorical(), self.__metrics_regression_list, self.__metrics_classification_list)
-        #algorithms.eaSimple(toolbox.population(n=n_train_sets), toolbox, cxpb=0.5, mutpb=0.2, ngen=10, verbose=False)
-        #algorithms.eaSimple(toolbox.population(n=int(0.01*n_train_sets*len(selected_algos))), toolbox, cxpb=0.5, mutpb=0.2, ngen=10, verbose=False)
-        #algorithms.eaSimple(toolbox.population(), toolbox, cxpb=0.5, mutpb=0.2, ngen=self.ngen, verbose=False)
+        #running the GA algorithm
         algorithms.eaSimple(toolbox.population(), toolbox, cxpb=0.8, mutpb=0.3, ngen=self.ngen, verbose=False)
         
         #preparing the results
@@ -540,5 +541,5 @@ if __name__ == '__main__':
                     , min_x_y_correlation_rate=0.01
                     , pool=pool
                     , ngen=10
-                    , ds_name='iris_mut3')
+                    , ds_name='iris_ENSEMBLE')
     print(automl.getBestResult())

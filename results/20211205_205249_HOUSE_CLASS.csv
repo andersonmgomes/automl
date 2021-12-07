@@ -1,0 +1,40 @@
+train_order,algorithm,features,n_features,train_time,mem_max,f1,accuracy,roc_auc,confusion_matrix
+2,GaussianProcessClassifier(kernel=1**2 * RBF(length_scale=1)),"('Avg. Area Number of Bedrooms', 'Avg. Area Number of Rooms', 'Avg. Area House Age', 'Avg. Area Income')",4,2851.4305457,3944.734375,0.7061415378836321,0.8642,0.9244298666666667,"[[698  52]
+ [ 85 165]]"
+8,QuadraticDiscriminantAnalysis(),"('Avg. Area Number of Bedrooms', 'Avg. Area Number of Rooms', 'Avg. Area House Age', 'Avg. Area Income')",4,14.502748099999735,1749.390625,0.7029416746422902,0.8634000000000001,0.9241685333333333,"[[699  51]
+ [ 90 160]]"
+11,QuadraticDiscriminantAnalysis(),"('Avg. Area Number of Rooms', 'Avg. Area House Age', 'Avg. Area Income')",3,14.573140599999988,1758.609375,0.7023698374168672,0.8632,0.9242933333333333,"[[703  47]
+ [ 85 165]]"
+6,AdaBoostClassifier(),"('Avg. Area Number of Bedrooms', 'Avg. Area Number of Rooms', 'Avg. Area House Age', 'Avg. Area Income')",4,10.208380500000203,1749.50390625,0.6924618353296612,0.8555999999999999,0.9131525333333332,"[[693  57]
+ [ 83 167]]"
+10,LogisticRegression(),"('Avg. Area Number of Bedrooms', 'Avg. Area Number of Rooms', 'Avg. Area House Age', 'Avg. Area Income')",4,7.911981200000355,1758.65234375,0.6891735969060522,0.8652000000000001,0.9241088,"[[714  36]
+ [103 147]]"
+1,SVC(probability=True),"('Avg. Area Number of Bedrooms', 'Avg. Area Number of Rooms', 'Avg. Area House Age', 'Avg. Area Income')",4,24.857480700000004,1625.38671875,0.6855703713984209,0.8602000000000001,0.9156576,"[[712  38]
+ [104 146]]"
+5,"MLPClassifier(alpha=1, max_iter=1000)","('Avg. Area Number of Bedrooms', 'Avg. Area Number of Rooms', 'Avg. Area House Age', 'Avg. Area Income')",4,53.469519799999944,1992.26171875,0.6845049659715277,0.8630000000000001,0.9239317333333332,"[[713  37]
+ [102 148]]"
+9,"XGBClassifier(base_score=0.5, booster='gbtree', colsample_bylevel=1,
+              colsample_bynode=1, colsample_bytree=1, enable_categorical=False,
+              eval_metric='mlogloss', gamma=0, gpu_id=-1, importance_type=None,
+              interaction_constraints='', learning_rate=0.300000012,
+              max_delta_step=0, max_depth=6, min_child_weight=1, missing=nan,
+              monotone_constraints='()', n_estimators=100, n_jobs=12,
+              num_parallel_tree=1, predictor='auto', random_state=0,
+              reg_alpha=0, reg_lambda=1, scale_pos_weight=1, subsample=1,
+              tree_method='exact', use_label_encoder=False,
+              validate_parameters=1, verbosity=None)","('Avg. Area Number of Bedrooms', 'Avg. Area Number of Rooms', 'Avg. Area House Age', 'Avg. Area Income')",4,13.548646100000042,1759.453125,0.6798175945348398,0.8460000000000001,0.900784,"[[688  62]
+ [ 88 162]]"
+3,DecisionTreeClassifier(max_depth=5),"('Avg. Area Number of Bedrooms', 'Avg. Area Number of Rooms', 'Avg. Area House Age', 'Avg. Area Income')",4,14.984857199999624,1991.49609375,0.6576790644355512,0.8318,0.8776688,"[[681  69]
+ [ 95 155]]"
+0,KNeighborsClassifier(n_neighbors=3),"('Avg. Area Number of Bedrooms', 'Avg. Area Number of Rooms', 'Avg. Area House Age', 'Avg. Area Income')",4,7.906559900000001,1604.7421875,0.6517037538674335,0.8358000000000001,0.8392522666666666,"[[680  70]
+ [ 96 154]]"
+7,GaussianNB(),"('Avg. Area Number of Bedrooms', 'Avg. Area Number of Rooms', 'Avg. Area House Age', 'Avg. Area Income')",4,14.491326999999728,1749.05078125,0.6479024796704812,0.8544,0.9161664,"[[720  30]
+ [112 138]]"
+4,"RandomForestClassifier(max_depth=5, max_features=1, n_estimators=10)","('Avg. Area Number of Bedrooms', 'Avg. Area Number of Rooms', 'Avg. Area House Age', 'Avg. Area Income')",4,8.161925000000338,1992.03125,0.5880909159838389,0.8373999999999999,0.8947296,"[[724  26]
+ [142 108]]"
+13,GaussianProcessClassifier(kernel=1**2 * RBF(length_scale=1)),"('Avg. Area Number of Bedrooms', 'Avg. Area Number of Rooms', 'Avg. Area Income')",3,2995.5196203000005,4443.94140625,0.577810125108846,0.8206,0.8574581333333333,"[[707  43]
+ [116 134]]"
+12,GaussianProcessClassifier(kernel=1**2 * RBF(length_scale=1)),"('Avg. Area Number of Bedrooms', 'Avg. Area Number of Rooms', 'Avg. Area House Age')",3,2354.8948266,4078.22265625,0.3999600173942198,0.7778,0.7678752,"[[694  56]
+ [180  70]]"
+14,KNeighborsClassifier(n_neighbors=3),"('Avg. Area Number of Bedrooms', 'Avg. Area Number of Rooms', 'Avg. Area House Age')",3,8.067114100000254,2247.10546875,0.39744282393542757,0.7312,0.6542730666666666,"[[636 114]
+ [168  82]]"
