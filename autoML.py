@@ -50,6 +50,7 @@ from sklearn.ensemble import VotingClassifier, StackingClassifier
 from tpot import TPOTClassifier
 from skopt import BayesSearchCV
 from sklearn.metrics import get_scorer
+from sklearn.pipeline import Pipeline
 
 def features_corr_level_Y(i, X, y, threshold):
     #features engineering
@@ -103,10 +104,7 @@ def __score_dataset(model, x_cols, automl_obj):
     
     metrics_value_list = []
     for scor_str in scoring_list:
-        #scor_func = get_scorer(scor_str)._score_func
-        #scor_obj.multi_class = 'ovr'
         metrics_value_list.append(get_scorer(scor_str)(model, X_test2, automl_obj.y_test))
-        #metrics_value_list.append(np.mean(cross_val_score(model, X_train2, automl_obj.y_train, cv=5, scoring=scor)))
     
     result_list = metrics_value_list
 
@@ -172,7 +170,7 @@ def evaluation(individual, automl_obj):
     t0 = time.perf_counter()
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        mem_max, score_result = memory_usage(proc=(__score_dataset, (algo, col_tuple, automl))
+        mem_max, score_result = memory_usage(proc=(__score_dataset, (algo, col_tuple, automl_obj))
                                             , max_usage=True
                                                 , retval=True, include_children=True)
     automl_obj.results.loc[len(automl_obj.results)] = np.concatenate((np.array([algo, col_tuple
@@ -219,17 +217,15 @@ class AutoML:
     ALGORITHMS = {
         #classifiers
         #https://scikit-learn.org/stable/auto_examples/classification/plot_classifier_comparison.html
-        KNeighborsClassifier(): 
+        KNeighborsClassifier(n_jobs=-1): 
             {"n_neighbors": [3,5,7,9,11,13,15,17],
              "p": [2, 3],
-             "n_jobs": [-1],
              },
         SVC(probability=True):
             {"C": [0.001, 0.01, 0.1, 1, 10, 100, 1000],
              "gamma": ["auto", "scale"],
              "class_weight": ["balanced", None]},
-        GaussianProcessClassifier():{
-            "n_jobs": [-1],
+        GaussianProcessClassifier(n_jobs=-1):{
             "copy_X_train": [False],
             "warm_start": [True, False],},
         DecisionTreeClassifier():{
@@ -281,8 +277,8 @@ class AutoML:
             "C": [0.001, 0.01, 0.1, 1, 10,
                   100, 1000],
             },
-        VotingClassifier(estimators=[]):{
-            "n_jobs": [-1],
+        VotingClassifier(estimators=[], n_jobs=-1):{
+            "voting": ["soft"],
             },
         StackingClassifier(estimators=[], n_jobs=-1):{
             "stack_method": ["auto"],
