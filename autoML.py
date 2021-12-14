@@ -1,57 +1,52 @@
-from re import escape
-from numpy.core.numeric import Infinity, NaN
-import pandas as pd 
-#import modin.pandas as pd #https://modin.readthedocs.io/
-from numpy.lib.function_base import append
-from sklearn.base import ClassifierMixin, RegressorMixin
-from sklearn.model_selection import train_test_split
-from sklearn.model_selection import cross_val_score
-from sklearn import linear_model, utils
-import numpy as np
-from scipy.special import comb
-from sklearn import preprocessing
-from sklearn import svm
-from sklearn import tree
-from sklearn import neighbors
-import time
-from memory_profiler import memory_usage
-from sklearn.metrics import confusion_matrix
-from sklearn.preprocessing import OneHotEncoder
-from sklearn.preprocessing import OrdinalEncoder
-import ray
-import scipy.stats as sta
-from joblib import Parallel, delayed
-import warnings
 import math
+import time
+import warnings
+from datetime import datetime
+from multiprocessing import Pool
+
+import numpy as np
+import pandas as pd
+import scipy.stats as sta
 from bitarray import bitarray
 from bitarray import util as bautil
-from multiprocessing import Pipe, Pool
 from deap import algorithms, base, creator, tools
-from sklearn.gaussian_process import GaussianProcessClassifier
-from sklearn.gaussian_process.kernels import RBF
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.naive_bayes import GaussianNB
-from xgboost import XGBClassifier, XGBRegressor, XGBRFRegressor
-from sklearn.neural_network import MLPClassifier
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.svm import SVC
-from sklearn.gaussian_process import GaussianProcessClassifier
-from sklearn.gaussian_process.kernels import RBF
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
-from sklearn.naive_bayes import GaussianNB
-from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
-from sklearn.naive_bayes import MultinomialNB
+from joblib import Parallel, delayed
+from memory_profiler import memory_usage
+#import modin.pandas as pd #https://modin.readthedocs.io/
+from scipy.special import comb
 from scoop import futures
-from datetime import datetime
-import math
-from sklearn.ensemble import BaggingClassifier, GradientBoostingClassifier, GradientBoostingRegressor, HistGradientBoostingClassifier
-from sklearn.ensemble import VotingClassifier, StackingClassifier
-from tpot import TPOTClassifier
+from sklearn import linear_model, neighbors, preprocessing, svm, tree, utils
+from sklearn.base import ClassifierMixin, RegressorMixin
+from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
+from sklearn.ensemble import (AdaBoostClassifier, GradientBoostingClassifier,
+                              GradientBoostingRegressor,
+                              HistGradientBoostingClassifier,
+                              RandomForestClassifier, StackingClassifier,
+                              VotingClassifier)
+from sklearn.gaussian_process import GaussianProcessClassifier
+from sklearn.metrics import confusion_matrix, get_scorer
+from sklearn.model_selection import train_test_split
+from sklearn.naive_bayes import GaussianNB, MultinomialNB
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder
+from sklearn.svm import SVC
+from sklearn.tree import DecisionTreeClassifier
 from skopt import BayesSearchCV
-from sklearn.metrics import get_scorer
-from sklearn.pipeline import Pipeline
+#from tpot import TPOTClassifier
+from xgboost import XGBClassifier, XGBRegressor, XGBRFRegressor
+import os
 
+def flushResults(automl_obj):
+    #saving results in a csv file
+    filename = automl_obj.start_time.strftime("%Y%m%d_%H%M%S")
+    if not(automl_obj.ds_name is None):
+        filename += '_' + automl_obj.ds_name.upper()
+    filename += '.csv'
+    filedir = './results'
+    if not os.path.exists(filedir):
+        os.mkdir(filedir)
+    automl_obj.results.drop('model_instance', axis=1).to_csv(os.path.join(filedir, filename), index=False)
+    
 def features_corr_level_Y(i, X, y, threshold):
     #features engineering
     #testing correlation between X and Y
@@ -178,6 +173,7 @@ def evaluation(individual, automl_obj):
                                                                         , (time.perf_counter() - t0)
                                                                         , mem_max], dtype=object)
                                                             , score_result))
+    flushResults(automl_obj)
     return float2bigint(score_result[0])
 
 def gen_first_people(n_features, n_algos, n_bits_algos):
@@ -300,6 +296,7 @@ class AutoML:
                  , pool = None
                  , ds_name = None
                  , ngen = 10) -> None:
+        self.start_time = datetime.now()
         #ray.init(ignore_reinit_error=True)
         #initializing variables
         self.results = None
@@ -445,9 +442,6 @@ class AutoML:
         #else
         return self.getResults(resultWithModel).iloc[0]
     
-    def __train_models(self):
-        pass
-    
     def getResults(self, resultWithModel=False, buffer=True):
         if buffer and self.results is not None:
             if resultWithModel:                   
@@ -519,13 +513,6 @@ class AutoML:
         self.results.sort_values(by=self.main_metric, ascending=False, inplace=True)
         self.results = self.results.rename_axis('train_order').reset_index()        
 
-        #saving results in a csv file
-        filename = datetime.now().strftime("%Y%m%d_%H%M%S")
-        if not(self.ds_name is None):
-            filename += '_' + self.ds_name.upper()
-        filename += '.csv'
-        self.results.drop('model_instance', axis=1).to_csv('results/' + filename, index=False)
-        
         if resultWithModel:                   
             return self.results
         #else
@@ -562,6 +549,7 @@ class AutoML:
 
 from cf_matrix import make_confusion_matrix
 
+
 def getConfusionMatrixHeatMap(cf_matrix, title='CF Matrix'):
     group_names = ['True Neg','False Pos','False Neg','True Pos']
     categories = ['Zero', 'One']
@@ -571,6 +559,7 @@ def testAutoMLByCSV(csv_path, y_colname):
     return testAutoML(pd.read_csv(csv_path), y_colname=y_colname)
 
 import ds_utils as util
+
 
 def testAutoML(ds, y_colname):
     automl = AutoML(ds, y_colname, min_x_y_correlation_rate=0.06)
