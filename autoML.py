@@ -103,7 +103,6 @@ def __score_dataset(model, x_cols, automl_obj):
     
     result_list = metrics_value_list
 
-    #model.fit(X_train2, automl_obj.y_train) #fit with entire train dataset
     if automl_obj.YisCategorical():
         #confusion matrix
         result_list.append(confusion_matrix(automl_obj.y_test, model.predict(X_test2)))
