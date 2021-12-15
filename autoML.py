@@ -303,7 +303,7 @@ class AutoML:
         self.algorithms = algorithms
         self.__unique_categoric_limit = unique_categoric_limit
         self.metrics_regression_list = ['r2', 'neg_mean_absolute_error', 'neg_mean_squared_error']
-        self.metrics_classification_list = ['roc_auc', 'f1', 'accuracy',]
+        self.metrics_classification_list = ['f1', 'accuracy', 'roc_auc']
         #metrics reference: https://scikit-learn.org/stable/modules/model_evaluation.html
         self.__min_x_y_correlation_rate = min_x_y_correlation_rate #TODO: #1 MIN_X_Y_CORRELATION_RATE: define this value dynamically
         self.__n_features_threshold = n_features_threshold #TODO: N_FEATURES_THRESHOLD: define this value dynamically
@@ -544,11 +544,8 @@ class AutoML:
         return train_test_split(self.X, y, train_size=0.8, test_size=0.2, random_state=self.__RANDOM_STATE, stratify=stratify)
 
 #utilitary methods
-#def all_subsets(ss, min_n = 1):
-#    return list(chain(*map(lambda x: combinations(ss, x), range(min_n, len(ss)+1))))
 
 from cf_matrix import make_confusion_matrix
-
 
 def getConfusionMatrixHeatMap(cf_matrix, title='CF Matrix'):
     group_names = ['True Neg','False Pos','False Neg','True Pos']
@@ -579,7 +576,7 @@ if __name__ == '__main__':
     automl = AutoML(util.getDSIris(), 'class'
                     , min_x_y_correlation_rate=0.01
                     , pool=pool
-                    , ngen=10
+                    , ngen=1
                     , ds_name='iris_HIPER')
     print(automl.getResults())
     print(automl.getBestResult())

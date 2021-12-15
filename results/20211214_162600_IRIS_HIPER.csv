@@ -1,0 +1,62 @@
+algorithm,features,n_features,train_time,mem_max,roc_auc_ovr_weighted,f1_weighted,accuracy,confusion_matrix
+LogisticRegression(n_jobs=-1),"('petal_length', 'sepal_width', 'sepal_length')",3,73.45361649999995,4161.34765625,1.0,0.9326599326599326,0.9333333333333333,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  2  8]]"
+"VotingClassifier(estimators=[('e1', LogisticRegression(n_jobs=-1)),
+                             ('e2', SVC(probability=True)),
+                             ('e3', QuadraticDiscriminantAnalysis())],
+                 n_jobs=-1)","('petal_length', 'sepal_width', 'sepal_length')",3,74.4056212999999,4209.3671875,1.0,0.8976982097186702,0.9,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  3  7]]"
+SVC(probability=True),"('petal_length', 'sepal_width', 'sepal_length')",3,105.81055729999997,3688.234375,0.9966666666666666,0.9326599326599326,0.9333333333333333,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  2  8]]"
+QuadraticDiscriminantAnalysis(),"('petal_length', 'sepal_width', 'sepal_length')",3,41.1267031000001,3950.08984375,0.9966666666666666,0.9326599326599326,0.9333333333333333,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  2  8]]"
+AdaBoostClassifier(),"('petal_length', 'sepal_width', 'sepal_length')",3,71.5435013,3947.87109375,0.9783333333333334,0.8976982097186702,0.9,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  3  7]]"
+"XGBClassifier(base_score=None, booster=None, colsample_bylevel=None,
+              colsample_bynode=None, colsample_bytree=None,
+              enable_categorical=False, eval_metric='mlogloss', gamma=None,
+              gpu_id=None, importance_type=None, interaction_constraints=None,
+              learning_rate=None, max_delta_step=None, max_depth=None,
+              min_child_weight=None, missing=nan, monotone_constraints=None,
+              n_estimators=100, n_jobs=None, num_parallel_tree=None,
+              predictor=None, random_state=None, reg_alpha=None,
+              reg_lambda=None, scale_pos_weight=None, subsample=None,
+              tree_method=None, use_label_encoder=False,
+              validate_parameters=None, verbosity=None)","('petal_length', 'sepal_width', 'sepal_length')",3,264.95332919999987,4130.37109375,0.9766666666666667,0.8997493734335841,0.9,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  2  8]]"
+GaussianNB(),"('petal_length', 'sepal_width', 'sepal_length')",3,46.596859600000016,3947.54296875,0.9766666666666666,0.8997493734335841,0.9,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  2  8]]"
+RandomForestClassifier(n_jobs=-1),"('petal_length', 'sepal_width', 'sepal_length')",3,286.8556085000001,3963.16015625,0.9733333333333334,0.9326599326599326,0.9333333333333333,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  2  8]]"
+HistGradientBoostingClassifier(),"('petal_length', 'sepal_width', 'sepal_length')",3,246.95398840000007,4123.3515625,0.9700000000000001,0.861111111111111,0.8666666666666667,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  4  6]]"
+GradientBoostingClassifier(),"('petal_length', 'sepal_width', 'sepal_length')",3,90.59924990000013,4118.59375,0.9666666666666667,0.861111111111111,0.8666666666666667,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  4  6]]"
+KNeighborsClassifier(n_jobs=-1),"('petal_length', 'sepal_width', 'sepal_length')",3,120.597077,3676.3984375,0.9650000000000001,0.8976982097186702,0.9,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  3  7]]"
+GaussianProcessClassifier(n_jobs=-1),"('petal_length', 'sepal_width', 'sepal_length')",3,86.21578410000001,3785.7421875,0.9483333333333335,0.8653198653198653,0.8666666666666667,"[[10  0  0]
+ [ 0  7  3]
+ [ 0  1  9]]"
+DecisionTreeClassifier(),"('petal_length', 'sepal_width', 'sepal_length')",3,60.64034459999999,3795.77734375,0.925,0.8976982097186702,0.9,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  3  7]]"
+MultinomialNB(),"('petal_length', 'sepal_width', 'sepal_length')",3,52.28828060000001,4115.83203125,0.825,0.6632996632996632,0.6666666666666666,"[[10  0  0]
+ [ 0  6  4]
+ [ 0  6  4]]"
+"StackingClassifier(estimators=[('e1', LogisticRegression(n_jobs=-1)),
+                               ('e2', SVC(probability=True)),
+                               ('e3', QuadraticDiscriminantAnalysis())],
+                   n_jobs=-1)","('petal_length', 'sepal_width', 'sepal_length')",3,89.40747519999991,4320.6171875,1.0,0.9326599326599326,0.9333333333333333,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  2  8]]"
