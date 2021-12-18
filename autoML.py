@@ -14,7 +14,6 @@ from joblib import Parallel, delayed
 from memory_profiler import memory_usage
 #import modin.pandas as pd #https://modin.readthedocs.io/
 from scipy.special import comb
-from scoop import futures
 from sklearn import linear_model, neighbors, preprocessing, svm, tree, utils
 from sklearn.base import ClassifierMixin, RegressorMixin
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
@@ -294,15 +293,20 @@ class AutoML:
                  , n_features_threshold = 1
                  , pool = None
                  , ds_name = None
-                 , ngen = 10) -> None:
+                 , ngen = 10
+                 , metrics = None
+                 ) -> None:
         self.start_time = datetime.now()
         #ray.init(ignore_reinit_error=True)
         #initializing variables
         self.results = None
         self.algorithms = algorithms
         self.__unique_categoric_limit = unique_categoric_limit
-        self.metrics_regression_list = ['r2', 'neg_mean_absolute_error', 'neg_mean_squared_error']
-        self.metrics_classification_list = ['f1', 'accuracy', 'roc_auc']
+        self.metrics_regression_list = metrics
+        self.metrics_classification_list = metrics
+        if metrics is None:
+            self.metrics_regression_list = ['r2', 'neg_mean_absolute_error', 'neg_mean_squared_error']
+            self.metrics_classification_list = ['f1', 'accuracy', 'roc_auc']
         #metrics reference: https://scikit-learn.org/stable/modules/model_evaluation.html
         self.__min_x_y_correlation_rate = min_x_y_correlation_rate #TODO: #1 MIN_X_Y_CORRELATION_RATE: define this value dynamically
         self.__n_features_threshold = n_features_threshold #TODO: N_FEATURES_THRESHOLD: define this value dynamically
@@ -331,12 +335,19 @@ class AutoML:
             self.__y_encoder = OrdinalEncoder(dtype=int)
             self.y_full = pd.DataFrame(self.__y_encoder.fit_transform(self.y_full), columns=[self.y_colname])
             if len(self.y_full[self.y_colname].unique()) > 2: #multclass 
-                #adjusting the F1 score and ROC_AUC for multclass target
+                #adjusting the metrics for multclass target
                 for i, m in enumerate(self.metrics_classification_list):
                     if m == 'f1':
                         self.metrics_classification_list[i] = 'f1_weighted'
                     elif m == 'roc_auc':
                         self.metrics_classification_list[i] = 'roc_auc_ovr_weighted'
+                    elif m == 'accuracy':
+                        self.metrics_classification_list[i] = 'balanced_accuracy'
+                    elif m == 'recall':
+                        self.metrics_classification_list[i] = 'recall_weighted'
+                    elif m == 'precision':
+                        self.metrics_classification_list[i] = 'precision_weighted'
+
         else:
             print('ML problem type: Regression')
 
@@ -507,6 +518,8 @@ class AutoML:
         toolbox = ga_toolbox(self)
         #running the GA algorithm
         algorithms.eaSimple(toolbox.population(), toolbox, cxpb=0.8, mutpb=0.3, ngen=self.ngen, verbose=False)
+        #free GA memory
+        del(toolbox)
         
         #preparing the results
         self.results.sort_values(by=self.main_metric, ascending=False, inplace=True)
