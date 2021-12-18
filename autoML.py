@@ -447,19 +447,23 @@ class AutoML:
         return self.getBestResult(True).model_instance
 
     def getBestConfusionMatrix(self):
+        return self.getConfusionMatrix(0)
+    
+    def getConfusionMatrix(self, result_index):
         if self.YisContinuous():
             return None
         #else: classification problem
-        title=str(self.getBestResult().algorithm)
+        result = self.getResults().iloc[result_index]
+        title=str(result.algorithm)
         title = title[:title.find('(')]
-        title += '\n(' + str(self.getBestResult().n_features) +' features)'
+        title += '\n(' + str(result.n_features) +' features)'
         categories = self.y_classes#['Zero', 'One']
         group_names = [] #['True Neg','False Pos','False Neg','True Pos']
         for c in categories:
             group_names.append('True_' + str(c)) 
             group_names.append('False_' + str(c))
         
-        return make_confusion_matrix(self.getBestResult().confusion_matrix
+        return make_confusion_matrix(result.confusion_matrix
                                      , group_names=group_names
                                      , categories=categories
                                      , cmap='Blues'

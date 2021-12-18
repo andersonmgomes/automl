@@ -1,0 +1,4 @@
+algorithm,features,n_features,train_time,mem_max,f1_weighted,balanced_accuracy,roc_auc_ovr_weighted,confusion_matrix
+KNeighborsClassifier(n_jobs=-1),"('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,42.2552437,1904.84765625,1.0,1.0,1.0,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  0 10]]"
