@@ -104,7 +104,7 @@ def __score_dataset(model, x_cols, automl_obj):
 
     if automl_obj.YisCategorical():
         #confusion matrix
-        result_list.append(confusion_matrix(automl_obj.y_test, model.predict(X_test2)))
+        result_list.append(confusion_matrix(automl_obj.y_test, model.predict(X_test2), labels=automl_obj.y_classes))
 
     #model
     result_list.append(model)
@@ -189,7 +189,7 @@ def ga_toolbox(automl_obj):
     #genetics algorithm: creating types
     creator.create("FitnessMax", base.Fitness, weights=(1.0,))
     creator.create("Individual", list, fitness=creator.FitnessMax)
-    #multprocessing
+    #multiprocessing
     toolbox = base.Toolbox()
     if not(automl_obj.pool is None):
         #toolbox.register("map", pool.map) #TODO: check if it works
@@ -295,6 +295,7 @@ class AutoML:
                  , ds_name = None
                  , ngen = 10
                  , metrics = None
+                 , features_engineering = True
                  ) -> None:
         self.start_time = datetime.now()
         #ray.init(ignore_reinit_error=True)
@@ -328,14 +329,18 @@ class AutoML:
         self.y_full = ds[[self.y_colname]]
         self.__y_encoder = None
         self.y = np.asanyarray(self.y_full).reshape(-1, 1).ravel()
+        self.y_is_binary = False
+        self.y_classes = None
         
         if self.YisCategorical():
             print('ML problem type: Classification')
             #encoding
             self.__y_encoder = OrdinalEncoder(dtype=int)
             self.y_full = pd.DataFrame(self.__y_encoder.fit_transform(self.y_full), columns=[self.y_colname])
-            if len(self.y_full[self.y_colname].unique()) > 2: #multclass 
-                #adjusting the metrics for multclass target
+            self.y_classes = np.sort(self.y_full[self.y_colname].unique())
+            self.y_is_binary = len(self.y_classes) == 2
+            if not self.y_is_binary: #multiclass 
+                #adjusting the metrics for multiclass target
                 for i, m in enumerate(self.metrics_classification_list):
                     if m == 'f1':
                         self.metrics_classification_list[i] = 'f1_weighted'
@@ -396,42 +401,42 @@ class AutoML:
         self.y_test = np.asanyarray(self.y_test).reshape(-1, 1).ravel()
         
         #running feature engineering in paralel
-        n_cols = self.X_train.shape[1]
-        print('Features engineering - Testing correlation with Y...')
-        considered_features = Parallel(n_jobs=-1, backend="multiprocessing")(delayed(features_corr_level_Y)
-                                  (i
-                                   , self.X_train.iloc[:,i]
-                                   , self.y_train
-                                   , self.__min_x_y_correlation_rate)
-                                  for i in range(0, n_cols))
-        considered_features = [x for x in considered_features if x is not None]
-        self.X_train = self.X_train.iloc[:,considered_features]
-        self.X_test = self.X_test.iloc[:,considered_features]
-        
-        def n_features_2str():
-            return "{:.2f}".format(100*(1-len(considered_features)/self.X.shape[1])) + "% (" + str(len(considered_features)) + " remained)"
-        
-        print('   Features engineering - Features reduction after correlation test with Y:'
-              , n_features_2str())
-        
-        print('Features engineering - Testing redudance between features...')    
-        
-        n_cols = self.X_train.shape[1]
-        considered_features = Parallel(n_jobs=-1, backend="multiprocessing")(delayed(features_corr_level_X)
-                                  (i
-                                   ,self.X_train.iloc[:,i]
-                                   , self.X_train.iloc[:,i+1:]
-                                   , (1-self.__min_x_y_correlation_rate))
-                                  for i in range(0, n_cols-1))
+        if features_engineering:
+            n_cols = self.X_train.shape[1]
+            print('Features engineering - Testing correlation with Y...')
+            considered_features = Parallel(n_jobs=-1, backend="multiprocessing")(delayed(features_corr_level_Y)
+                                    (i
+                                    , self.X_train.iloc[:,i]
+                                    , self.y_train
+                                    , self.__min_x_y_correlation_rate)
+                                    for i in range(0, n_cols))
+            considered_features = [x for x in considered_features if x is not None]
+            self.X_train = self.X_train.iloc[:,considered_features]
+            self.X_test = self.X_test.iloc[:,considered_features]
+            
+            def n_features_2str():
+                return "{:.2f}".format(100*(1-len(considered_features)/self.X.shape[1])) + "% (" + str(len(considered_features)) + " remained)"
+            
+            print('   Features engineering - Features reduction after correlation test with Y:'
+                , n_features_2str())
+            
+            print('Features engineering - Testing redudance between features...')    
+            
+            n_cols = self.X_train.shape[1]
+            considered_features = Parallel(n_jobs=-1, backend="multiprocessing")(delayed(features_corr_level_X)
+                                    (i
+                                    ,self.X_train.iloc[:,i]
+                                    , self.X_train.iloc[:,i+1:]
+                                    , (1-self.__min_x_y_correlation_rate))
+                                    for i in range(0, n_cols-1))
 
-        considered_features = [x for x in considered_features if x is not None]
-        self.X_train = self.X_train.iloc[:,considered_features]
-        self.X_test = self.X_test.iloc[:,considered_features]
-        
-        print('   Features engineering - Features reduction after redudance test:'
-              , n_features_2str())
-        
-        
+            considered_features = [x for x in considered_features if x is not None]
+            self.X_train = self.X_train.iloc[:,considered_features]
+            self.X_test = self.X_test.iloc[:,considered_features]
+            
+            print('   Features engineering - Features reduction after redudance test:'
+                , n_features_2str())
+
     def clearResults(self):
         self.results = None #cleaning the previous results
         
@@ -442,9 +447,23 @@ class AutoML:
         return self.getBestResult(True).model_instance
 
     def getBestConfusionMatrix(self):
-        getConfusionMatrixHeatMap(self.getBestResult().confusion_matrix
-                                  , title=(str(self.getBestResult().algorithm)
-                                           + ' (' + str(self.getBestResult().n_features) +' features)'))
+        if self.YisContinuous():
+            return None
+        #else: classification problem
+        title=str(self.getBestResult().algorithm)
+        title = title[:title.find('(')]
+        title += '\n(' + str(self.getBestResult().n_features) +' features)'
+        categories = self.y_classes#['Zero', 'One']
+        group_names = [] #['True Neg','False Pos','False Neg','True Pos']
+        for c in categories:
+            group_names.append('True_' + str(c)) 
+            group_names.append('False_' + str(c))
+        
+        return make_confusion_matrix(self.getBestResult().confusion_matrix
+                                     , group_names=group_names
+                                     , categories=categories
+                                     , cmap='Blues'
+                                     , title=title);    
                 
     def getBestResult(self, resultWithModel=False):
         if len(self.getResults(resultWithModel)) == 0:
@@ -559,11 +578,6 @@ class AutoML:
 
 from cf_matrix import make_confusion_matrix
 
-def getConfusionMatrixHeatMap(cf_matrix, title='CF Matrix'):
-    group_names = ['True Neg','False Pos','False Neg','True Pos']
-    categories = ['Zero', 'One']
-    return make_confusion_matrix(cf_matrix, group_names=group_names, categories=categories, cmap='Blues', title=title);    
-
 def testAutoMLByCSV(csv_path, y_colname):
     return testAutoML(pd.read_csv(csv_path), y_colname=y_colname)
 
@@ -584,11 +598,16 @@ def testAutoML(ds, y_colname):
     del(automl)
 
 if __name__ == '__main__':
-    pool = Pool(processes=10)
+    #pool = Pool(processes=10)
     automl = AutoML(util.getDSIris(), 'class'
                     , min_x_y_correlation_rate=0.01
-                    , pool=pool
+                    #, pool=pool
                     , ngen=1
-                    , ds_name='iris_HIPER')
+                    , ds_name='iris_HIPER'
+                    , algorithms={KNeighborsClassifier(n_jobs=-1): 
+                        {"n_neighbors": [3,5,7,9,11,13,15,17],
+                         "p": [2, 3],},}
+                    , features_engineering=False)
     print(automl.getResults())
     print(automl.getBestResult())
+    print(automl.getBestConfusionMatrix())

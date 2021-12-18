@@ -15,7 +15,8 @@ def make_confusion_matrix(cf,
                           sum_stats=True,
                           figsize=None,
                           cmap='Blues',
-                          title=None):
+                          title=None, 
+                          metrics_text = ''):
     '''
     This function will make a pretty plot of an sklearn Confusion Matrix cm using a Seaborn heatmap visualization.
 
@@ -74,19 +75,22 @@ def make_confusion_matrix(cf,
 
     # CODE TO GENERATE SUMMARY STATISTICS & TEXT FOR SUMMARY STATS
     if sum_stats:
-        #Accuracy is sum of diagonal divided by total observations
-        accuracy  = np.trace(cf) / float(np.sum(cf))
+        if metrics_text == '':
+            #Accuracy is sum of diagonal divided by total observations
+            accuracy  = np.trace(cf) / float(np.sum(cf))
 
-        #if it is a binary confusion matrix, show some more stats
-        if len(cf)==2:
-            #Metrics for Binary Confusion Matrices
-            precision = cf[1,1] / sum(cf[:,1])
-            recall    = cf[1,1] / sum(cf[1,:])
-            f1_score  = 2*precision*recall / (precision + recall)
-            stats_text = "\n\nAccuracy={:0.3f}\nPrecision={:0.3f}\nRecall={:0.3f}\nF1 Score={:0.3f}".format(
-                accuracy,precision,recall,f1_score)
+            #if it is a binary confusion matrix, show some more stats
+            if len(cf)==2:
+                #Metrics for Binary Confusion Matrices
+                precision = cf[1,1] / sum(cf[:,1])
+                recall    = cf[1,1] / sum(cf[1,:])
+                f1_score  = 2*precision*recall / (precision + recall)
+                stats_text = "\n\nAccuracy={:0.3f}\nPrecision={:0.3f}\nRecall={:0.3f}\nF1 Score={:0.3f}".format(
+                    accuracy,precision,recall,f1_score)
+            else:
+                stats_text = "\n\nAccuracy={:0.3f}".format(accuracy)
         else:
-            stats_text = "\n\nAccuracy={:0.3f}".format(accuracy)
+            stats_text = metrics_text
     else:
         stats_text = ""
 
