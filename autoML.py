@@ -121,11 +121,18 @@ def evaluation(individual, automl_obj):
     #tunning parameters
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        opt = BayesSearchCV(estimator=algo, search_spaces=automl_obj.algorithms[algo]
-                            , scoring=automl_obj.main_metric
-                            , n_iter=30, cv=5
-                            , verbose=0, n_jobs=-1, random_state=automl_obj.RANDOM_STATE
-                            )
+        if automl_obj.grid_search:
+            opt = GridSearchCV(estimator=algo, param_grid=automl_obj.algorithms[algo]
+                                , scoring=automl_obj.main_metric
+                                , cv=5
+                                , verbose=0, n_jobs=-1
+                                )
+        else:
+            opt = BayesSearchCV(estimator=algo, search_spaces=automl_obj.algorithms[algo]
+                                , scoring=automl_obj.main_metric
+                                , n_iter=30, cv=5
+                                , verbose=0, n_jobs=-1, random_state=automl_obj.RANDOM_STATE
+                                )
         opt.fit(X_train2, automl_obj.y_train)
 
 
