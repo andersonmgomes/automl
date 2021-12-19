@@ -16,7 +16,7 @@ def make_confusion_matrix(cf,
                           figsize=None,
                           cmap='Blues',
                           title=None, 
-                          metrics_text = ''):
+                          custom_metrics = None):
     '''
     This function will make a pretty plot of an sklearn Confusion Matrix cm using a Seaborn heatmap visualization.
 
@@ -75,7 +75,7 @@ def make_confusion_matrix(cf,
 
     # CODE TO GENERATE SUMMARY STATISTICS & TEXT FOR SUMMARY STATS
     if sum_stats:
-        if metrics_text == '':
+        if custom_metrics is None:
             #Accuracy is sum of diagonal divided by total observations
             accuracy  = np.trace(cf) / float(np.sum(cf))
 
@@ -90,7 +90,9 @@ def make_confusion_matrix(cf,
             else:
                 stats_text = "\n\nAccuracy={:0.3f}".format(accuracy)
         else:
-            stats_text = metrics_text
+            stats_text = '\n' 
+            for i in custom_metrics.items():
+                stats_text += "\n" + i[0] + "={:0.3f}".format(i[1])
     else:
         stats_text = ""
 

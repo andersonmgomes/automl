@@ -125,7 +125,6 @@ def evaluation(individual, automl_obj):
                             , scoring=automl_obj.main_metric
                             , n_iter=30, cv=5
                             , verbose=0, n_jobs=-1, random_state=automl_obj.RANDOM_STATE
-                            #, return_train_score=True
                             )
         opt.fit(X_train2, automl_obj.y_train)
 
@@ -477,12 +476,15 @@ class AutoML:
         for c in categories:
             group_names.append('True_' + str(c)) 
             group_names.append('False_' + str(c))
+            
+        custom_metrics = dict(result.loc[self.getMetrics()])
         
         return make_confusion_matrix(result.confusion_matrix
                                      , group_names=group_names
                                      , categories=categories
                                      , cmap='Blues'
-                                     , title=title);    
+                                     , title=title
+                                     , custom_metrics=custom_metrics);    
                 
     def getBestResult(self):
         if len(self.getResults()) == 0:
