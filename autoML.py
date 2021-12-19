@@ -31,6 +31,7 @@ from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 from skopt import BayesSearchCV
+from sklearn.model_selection import GridSearchCV
 #from tpot import TPOTClassifier
 from xgboost import XGBClassifier, XGBRegressor, XGBRFRegressor
 import os
@@ -44,7 +45,7 @@ def flushResults(automl_obj):
     filedir = './results'
     if not os.path.exists(filedir):
         os.mkdir(filedir)
-    automl_obj.results.drop('model_instance', axis=1).to_csv(os.path.join(filedir, filename), index=False)
+    automl_obj.results.to_csv(os.path.join(filedir, filename), index=False)
     
 def features_corr_level_Y(i, X, y, threshold):
     #features engineering
@@ -72,55 +73,6 @@ def features_corr_level_X(i, X_0, X_i, threshold):
             return None#x[i] above the threshold
     #else: feature ok, no redundance
     return i
-
-#def __score_dataset(model, x_cols, X_train, X_test, y_train, y_test, X, y
-#                    , YisCategorical, metrics_regression_list, metrics_classification_list):
-def __score_dataset(model, x_cols, automl_obj):    
-    X_train2 = automl_obj.X_train[list(x_cols)]
-    X_test2 = automl_obj.X_test[list(x_cols)]
-    
-    if len(x_cols)==1:
-        X_train2 = np.asanyarray(X_train2).reshape(-1, 1)
-        X_test2 = np.asanyarray(X_test2).reshape(-1, 1)
-
-    scoring_list = automl_obj.metrics_regression_list
-    if automl_obj.YisCategorical():
-        scoring_list = automl_obj.metrics_classification_list
-    
-    #tunning parameters
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        opt = BayesSearchCV(estimator=model, search_spaces=automl_obj.algorithms[model],
-                            scoring='f1_weighted', n_iter=30, cv=5,
-                            verbose=0, n_jobs=-1)
-        opt.fit(X_train2, automl_obj.y_train)
-    model = opt.best_estimator_
-    params = opt.best_params_
-    result_list = []
-    result_list.append(params)
-    
-    metrics_value_list = []
-    for scor_str in scoring_list:
-        metrics_value_list.append(get_scorer(scor_str)(model, X_test2, automl_obj.y_test))
-    
-    result_list.extend(metrics_value_list)
-    
-    if automl_obj.YisCategorical():
-        #confusion matrix
-        result_list.append(confusion_matrix(automl_obj.y_test, model.predict(X_test2), labels=automl_obj.y_classes))
-
-    #model
-    result_list.append(model)
-    
-    log_msg = '   *Model trained: ' + str(scoring_list[0]) 
-    log_msg += ' = {:.5f}'.format(metrics_value_list[0]) 
-    log_msg += ' | ' + str(len(x_cols)) + ' features' 
-    log_msg += ' | ' + str(model)[:str(model).find('(')] 
-    log_msg += ' | ' + str(x_cols)
-            
-    print(log_msg[:150].replace('\n',''))#show only the 150 first caracteres
-    
-    return np.array(result_list, dtype=object)
 
 def evaluation(individual, automl_obj):
     def float2bigint(float_value):
@@ -157,28 +109,85 @@ def evaluation(individual, automl_obj):
                 best_estimators.append(candidate_algo)
         algo.estimators = list(zip(['e'+str(i) for i in range(1,len(best_estimators)+1)],best_estimators))
         
-    #seeking for some previous result
-    previous_result = automl_obj.results[(automl_obj.results['algorithm'] == algo) 
-                                         & (automl_obj.results['features'].apply(str)==str(col_tuple))]
-    if previous_result.shape[0]>0:
-        return float2bigint(previous_result[automl_obj.main_metric])
-    #else 
-                
-    t0 = time.perf_counter()
+    X_train2 = automl_obj.X_train[list(col_tuple)]
+    X_test2 = automl_obj.X_test[list(col_tuple)]
+    
+    if len(col_tuple)==1:
+        X_train2 = np.asanyarray(X_train2).reshape(-1, 1)
+        X_test2 = np.asanyarray(X_test2).reshape(-1, 1)
+
+    scoring_list = automl_obj.getMetrics()
+    
+    #tunning parameters
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        mem_max, score_result = memory_usage(proc=(__score_dataset, (algo, col_tuple, automl_obj))
-                                            , max_usage=True
-                                                , retval=True, include_children=True)
-    automl_obj.results.loc[len(automl_obj.results)] = np.concatenate((np.array([algo
-                                                                                , score_result[0]
-                                                                                , col_tuple
-                                                                                , int(len(col_tuple))
-                                                                                , (time.perf_counter() - t0)
-                                                                                , mem_max], dtype=object)
-                                                                      , score_result[1:]))
+        opt = BayesSearchCV(estimator=algo, search_spaces=automl_obj.algorithms[algo]
+                            , scoring=automl_obj.main_metric
+                            , n_iter=30, cv=5
+                            , verbose=0, n_jobs=-1, random_state=automl_obj.RANDOM_STATE
+                            #, return_train_score=True
+                            )
+        opt.fit(X_train2, automl_obj.y_train)
+
+
+    def fit_score():
+        row = {'algorithm': algo
+               , 'params': params
+               , 'features': col_tuple
+               , 'n_features': len(col_tuple)
+               }
+
+        estimator = algo.set_params(**params)
+        t0 = time.perf_counter()
+        estimator.fit(X_train2, automl_obj.y_train)
+        row['train_time'] = time.perf_counter() - t0 #train_time
+        
+        t0 = time.perf_counter()
+        
+        for scor_str in scoring_list:
+            row[scor_str] = (get_scorer(scor_str)(estimator, X_test2, automl_obj.y_test))
+        
+        row['predict_time'] = (time.perf_counter() - t0)/len(automl_obj.y_test) #predict_time, considering one sample at a time
+        
+        if automl_obj.YisCategorical():
+            #confusion matrix
+            row['confusion_matrix'] = confusion_matrix(automl_obj.y_test, estimator.predict(X_test2), labels=automl_obj.y_classes)
+        
+        return row
+        
+    best_score = -1.0
+    #dataframe format: ['algorithm', 'params', 'features', 'n_features', 'train_time', 'predict_time', 'mem_max', <metrics>]
+    for params in opt.cv_results_['params']:
+        #seeking for some previous result
+        previous_result = automl_obj.results[(automl_obj.results['algorithm'] == algo) 
+                                             & (automl_obj.results['params'] == params)
+                                            & (automl_obj.results['features'] == col_tuple)]
+        if previous_result.shape[0]>0:
+            continue
+        #else 
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            mem_max, row_result = memory_usage(proc=(fit_score)
+                                                , max_usage=True
+                                                , retval=True
+                                                , include_children=True)
+        row_result['mem_max'] = mem_max
+
+        automl_obj.results.loc[len(automl_obj.results)] = row_result
+
+        if row_result[automl_obj.main_metric] > best_score:
+            best_score = row_result[automl_obj.main_metric]
+            
+        log_msg = '   *Model trained: ' + str(scoring_list[0]) 
+        log_msg += ' = {:.5f}'.format(row_result[automl_obj.main_metric]) 
+        log_msg += ' | ' + str(algo)[:str(algo).find('(')] 
+        log_msg += ' | ' + str(len(col_tuple)) + ' features' 
+        log_msg += ' | ' + str(params)[str(params).find('[')+1:str(params).find(']')]
+
+        print(log_msg[:150].replace('\n',''))#show only the 150 first caracteres
+ 
     flushResults(automl_obj)
-    return float2bigint(score_result[1]) #main metric
+    return float2bigint(best_score) #main metric
 
 def gen_first_people(n_features, n_algos, n_bits_algos):
     first_people = []
@@ -296,12 +305,12 @@ class AutoML:
                  , algorithms = ALGORITHMS
                  , unique_categoric_limit = 10 
                  , min_x_y_correlation_rate = 0.01
-                 , n_features_threshold = 1
                  , pool = None
                  , ds_name = None
                  , ngen = 10
                  , metrics = None
                  , features_engineering = True
+                 , grid_search = False
                  ) -> None:
         self.start_time = datetime.now()
         #ray.init(ignore_reinit_error=True)
@@ -316,11 +325,11 @@ class AutoML:
             self.metrics_classification_list = ['f1', 'accuracy', 'roc_auc']
         #metrics reference: https://scikit-learn.org/stable/modules/model_evaluation.html
         self.__min_x_y_correlation_rate = min_x_y_correlation_rate #TODO: #1 MIN_X_Y_CORRELATION_RATE: define this value dynamically
-        self.__n_features_threshold = n_features_threshold #TODO: N_FEATURES_THRESHOLD: define this value dynamically
-        self.__RANDOM_STATE = 1102
+        self.RANDOM_STATE = 1102
         self.ds_name = ds_name
         self.ngen = ngen
         self.pool = pool
+        self.grid_search = grid_search
         
         print('Original dataset dimensions:', ds_source.shape)
         #NaN values
@@ -450,7 +459,7 @@ class AutoML:
         if self.getBestResult(True) is None:
             return None
         #else
-        return self.getBestResult(True).model_instance
+        return self.getBestResult(True).estimator
 
     def getBestConfusionMatrix(self):
         return self.getConfusionMatrix(0)
@@ -475,28 +484,23 @@ class AutoML:
                                      , cmap='Blues'
                                      , title=title);    
                 
-    def getBestResult(self, resultWithModel=False):
-        if len(self.getResults(resultWithModel)) == 0:
+    def getBestResult(self):
+        if len(self.getResults()) == 0:
             return None
         #else
-        return self.getResults(resultWithModel).iloc[0]
+        return self.getResults().iloc[0]
     
-    def getResults(self, resultWithModel=False, buffer=True):
+    def getResults(self, buffer=True):
         if buffer and self.results is not None:
-            if resultWithModel:                   
-                return self.results
-            #else
-            return self.results.drop('model_instance', axis=1)
+            return self.results
                    
         #else to get results
-        #dataframe format: [algorithm, features, n_features, train_time, mem_max, [specific metrics], model_instance]
-        columns_list = ['algorithm', 'params', 'features', 'n_features', 'train_time', 'mem_max']
+        #dataframe format: ['algorithm', 'params', 'features', 'n_features', 'train_time', 'predict_time', 'mem_max', <metrics>]
+        columns_list = ['algorithm', 'params', 'features', 'n_features', 'train_time', 'predict_time', 'mem_max']
+        
+        columns_list.extend(self.getMetrics())
         if self.YisCategorical():
-            columns_list.extend(self.metrics_classification_list)
             columns_list.append('confusion_matrix')
-        else:
-            columns_list.extend(self.metrics_regression_list)
-        columns_list.append('model_instance')
         
         self.results = pd.DataFrame(columns=columns_list)
         del(columns_list)
@@ -551,14 +555,17 @@ class AutoML:
         del(toolbox)
         
         #preparing the results
-        self.results.sort_values(by=self.main_metric, ascending=False, inplace=True)
+        self.results.sort_values(by=[self.main_metric, 'predict_time'], ascending=[False,True], inplace=True)
         self.results = self.results.rename_axis('train_order').reset_index()        
 
-        if resultWithModel:                   
-            return self.results
-        #else
-        return self.results.drop('model_instance', axis=1)
-        
+        return self.results
+    
+    def getMetrics(self):
+        if self.YisCategorical():
+            return self.metrics_classification_list
+        #else:
+        return self.metrics_regression_list
+    
     def YisCategorical(self) -> bool:
         y_type = type(self.y_full.iloc[0,0])
         
@@ -582,7 +589,7 @@ class AutoML:
         if self.YisCategorical():
             stratify = y
             
-        return train_test_split(self.X, y, train_size=0.8, test_size=0.2, random_state=self.__RANDOM_STATE, stratify=stratify)
+        return train_test_split(self.X, y, train_size=0.8, test_size=0.2, random_state=self.RANDOM_STATE, stratify=stratify)
 
 #utilitary methods
 
