@@ -95,13 +95,16 @@ def __score_dataset(model, x_cols, automl_obj):
                             verbose=0, n_jobs=-1)
         opt.fit(X_train2, automl_obj.y_train)
     model = opt.best_estimator_
+    params = opt.best_params_
+    result_list = []
+    result_list.append(params)
     
     metrics_value_list = []
     for scor_str in scoring_list:
         metrics_value_list.append(get_scorer(scor_str)(model, X_test2, automl_obj.y_test))
     
-    result_list = metrics_value_list
-
+    result_list.extend(metrics_value_list)
+    
     if automl_obj.YisCategorical():
         #confusion matrix
         result_list.append(confusion_matrix(automl_obj.y_test, model.predict(X_test2), labels=automl_obj.y_classes))
@@ -155,7 +158,8 @@ def evaluation(individual, automl_obj):
         algo.estimators = list(zip(['e'+str(i) for i in range(1,len(best_estimators)+1)],best_estimators))
         
     #seeking for some previous result
-    previous_result = automl_obj.results[(automl_obj.results['algorithm'] == algo) & (automl_obj.results['features'].apply(str)==str(col_tuple))]
+    previous_result = automl_obj.results[(automl_obj.results['algorithm'] == algo) 
+                                         & (automl_obj.results['features'].apply(str)==str(col_tuple))]
     if previous_result.shape[0]>0:
         return float2bigint(previous_result[automl_obj.main_metric])
     #else 
@@ -166,13 +170,15 @@ def evaluation(individual, automl_obj):
         mem_max, score_result = memory_usage(proc=(__score_dataset, (algo, col_tuple, automl_obj))
                                             , max_usage=True
                                                 , retval=True, include_children=True)
-    automl_obj.results.loc[len(automl_obj.results)] = np.concatenate((np.array([algo, col_tuple
-                                                                        , int(len(col_tuple))
-                                                                        , (time.perf_counter() - t0)
-                                                                        , mem_max], dtype=object)
-                                                            , score_result))
+    automl_obj.results.loc[len(automl_obj.results)] = np.concatenate((np.array([algo
+                                                                                , score_result[0]
+                                                                                , col_tuple
+                                                                                , int(len(col_tuple))
+                                                                                , (time.perf_counter() - t0)
+                                                                                , mem_max], dtype=object)
+                                                                      , score_result[1:]))
     flushResults(automl_obj)
-    return float2bigint(score_result[0])
+    return float2bigint(score_result[1]) #main metric
 
 def gen_first_people(n_features, n_algos, n_bits_algos):
     first_people = []
@@ -484,7 +490,7 @@ class AutoML:
                    
         #else to get results
         #dataframe format: [algorithm, features, n_features, train_time, mem_max, [specific metrics], model_instance]
-        columns_list = ['algorithm', 'features', 'n_features', 'train_time', 'mem_max']
+        columns_list = ['algorithm', 'params', 'features', 'n_features', 'train_time', 'mem_max']
         if self.YisCategorical():
             columns_list.extend(self.metrics_classification_list)
             columns_list.append('confusion_matrix')

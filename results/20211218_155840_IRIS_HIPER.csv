@@ -1,0 +1,4 @@
+algorithm,params,features,n_features,train_time,mem_max,f1_weighted,balanced_accuracy,roc_auc_ovr_weighted,confusion_matrix
+KNeighborsClassifier(n_jobs=-1),"('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,55.5165564,1899.1015625,"OrderedDict([('n_neighbors', 15), ('p', 3)])",0.9665831244778613,0.9666666666666667,0.9949999999999998,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  1  9]]"
