@@ -35,6 +35,7 @@ from sklearn.model_selection import GridSearchCV
 #from tpot import TPOTClassifier
 from xgboost import XGBClassifier, XGBRegressor, XGBRFRegressor
 import os
+from sklearn.neural_network import MLPClassifier
 
 def flushResults(automl_obj):
     #saving results in a csv file
@@ -252,9 +253,10 @@ class AutoML:
             "min_samples_leaf": [1, 2, 5, 10],
             "max_features": [None, "sqrt", "log2"],
             },
-        #MLPClassifier():{
-        #    "activation": ["identity", "logistic", "tanh", "relu"],
-        #    },
+        MLPClassifier():{
+            "learning_rate": ['constant', 'invscaling', 'adaptive'], 
+            'momentum' : [0.1, 0.5, 0.9], 
+            },
         AdaBoostClassifier():{
             "algorithm": ["SAMME", "SAMME.R"],
             },
