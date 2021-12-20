@@ -1,0 +1,49 @@
+algorithm,params,features,n_features,train_time,predict_time,mem_max,f1_weighted,balanced_accuracy,roc_auc_ovr_weighted,confusion_matrix
+"KNeighborsClassifier(n_jobs=-1, n_neighbors=15)","OrderedDict([('n_neighbors', 15), ('p', 3)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.002654200000009155,0.005181513333333498,1904.93359375,0.8997493734335841,0.9,0.9866666666666667,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  2  8]]"
+"KNeighborsClassifier(n_jobs=-1, n_neighbors=15)","OrderedDict([('n_neighbors', 13), ('p', 2)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.0024468999999953667,0.005258613333333054,1908.04296875,0.8997493734335841,0.9,0.9916666666666667,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  2  8]]"
+"KNeighborsClassifier(n_jobs=-1, n_neighbors=15)","OrderedDict([('n_neighbors', 11), ('p', 2)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.002775999999997225,0.004977453333333414,1910.015625,0.9326599326599326,0.9333333333333332,0.9933333333333333,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  2  8]]"
+"KNeighborsClassifier(n_jobs=-1, n_neighbors=15)","OrderedDict([('n_neighbors', 11), ('p', 3)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.002438900000001354,0.005050966666666549,1912.8828125,0.9326599326599326,0.9333333333333332,0.9866666666666667,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  2  8]]"
+"KNeighborsClassifier(n_jobs=-1, n_neighbors=15)","OrderedDict([('n_neighbors', 3), ('p', 3)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.0024433999999899925,0.005108693333333273,1915.51953125,0.9326599326599326,0.9333333333333332,0.9433333333333334,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  2  8]]"
+"KNeighborsClassifier(n_jobs=-1, n_neighbors=15)","OrderedDict([('n_neighbors', 9), ('p', 2)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.002426700000000892,0.005042256666666844,1918.70703125,0.8997493734335841,0.9,0.9933333333333333,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  2  8]]"
+"KNeighborsClassifier(n_jobs=-1, n_neighbors=15)","OrderedDict([('n_neighbors', 5), ('p', 3)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.002941100000001029,0.006317749999999952,1920.09375,0.8997493734335841,0.9,0.9883333333333334,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  2  8]]"
+"KNeighborsClassifier(n_jobs=-1, n_neighbors=15)","OrderedDict([('n_neighbors', 7), ('p', 2)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.002683200000006991,0.004935776666666432,1922.84765625,0.8997493734335841,0.9,0.9900000000000001,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  2  8]]"
+"KNeighborsClassifier(n_jobs=-1, n_neighbors=15)","OrderedDict([('n_neighbors', 17), ('p', 2)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.002412700000007817,0.005111820000000004,1926.42578125,0.8997493734335841,0.9,0.9866666666666667,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  2  8]]"
+"KNeighborsClassifier(n_jobs=-1, n_neighbors=15)","OrderedDict([('n_neighbors', 9), ('p', 3)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.003128400000008469,0.0074525466666671035,1927.8359375,0.8997493734335841,0.9,0.9816666666666668,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  2  8]]"
+"KNeighborsClassifier(n_jobs=-1, n_neighbors=15)","OrderedDict([('n_neighbors', 3), ('p', 2)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.0025169000000175856,0.005037316666666432,1930.796875,0.9326599326599326,0.9333333333333332,0.9433333333333334,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  2  8]]"
+"KNeighborsClassifier(n_jobs=-1, n_neighbors=15)","OrderedDict([('n_neighbors', 7), ('p', 3)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.0024673000000063894,0.0052058633333340746,1933.55859375,0.8997493734335841,0.9,0.9849999999999999,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  2  8]]"
+"KNeighborsClassifier(n_jobs=-1, n_neighbors=15)","OrderedDict([('n_neighbors', 5), ('p', 2)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.002379200000007131,0.004911026666666392,1936.3203125,0.8997493734335841,0.9,0.9616666666666667,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  2  8]]"
+"KNeighborsClassifier(n_jobs=-1, n_neighbors=15)","OrderedDict([('n_neighbors', 13), ('p', 3)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.002660200000008217,0.0063212200000000015,1940.3046875,0.8997493734335841,0.9,0.9866666666666667,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  2  8]]"
+"KNeighborsClassifier(n_jobs=-1, n_neighbors=15)","OrderedDict([('n_neighbors', 17), ('p', 3)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.0025870999999995092,0.00519179999999911,1943.18359375,0.8997493734335841,0.9,0.9849999999999999,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  2  8]]"
+"KNeighborsClassifier(n_jobs=-1, n_neighbors=15)","OrderedDict([('n_neighbors', 15), ('p', 2)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.002828700000009121,0.004770756666666405,1945.98828125,0.8997493734335841,0.9,0.9883333333333335,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  2  8]]"

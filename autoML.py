@@ -135,15 +135,14 @@ def evaluation(individual, automl_obj):
                                 )
         opt.fit(X_train2, automl_obj.y_train)
 
-
     def fit_score():
-        row = {'algorithm': algo
+        estimator = algo.set_params(**params)
+        row = {'algorithm': estimator
                , 'params': params
                , 'features': col_tuple
                , 'n_features': len(col_tuple)
                }
 
-        estimator = algo.set_params(**params)
         t0 = time.perf_counter()
         estimator.fit(X_train2, automl_obj.y_train)
         row['train_time'] = time.perf_counter() - t0 #train_time
@@ -462,10 +461,10 @@ class AutoML:
         self.results = None #cleaning the previous results
         
     def getBestModel(self):
-        if self.getBestResult(True) is None:
+        if self.getBestResult() is None:
             return None
         #else
-        return self.getBestResult(True).estimator
+        return self.getBestResult().estimator
 
     def getBestConfusionMatrix(self):
         return self.getConfusionMatrix(0)
@@ -477,7 +476,8 @@ class AutoML:
         result = self.getResults().iloc[result_index]
         title=str(result.algorithm)
         title = title[:title.find('(')]
-        title += '\n(' + str(result.n_features) +' features)'
+        title += ' (' + str(result.n_features) +' features)'
+        title += '\n' + str(result.params)
         categories = self.y_classes#['Zero', 'One']
         group_names = [] #['True Neg','False Pos','False Neg','True Pos']
         for c in categories:
@@ -499,6 +499,13 @@ class AutoML:
         #else
         return self.getResults().iloc[0]
     
+    def getResults_4Print(self, buffer=True):
+        results_df = self.getResults(buffer)
+        results_df['algorithm'] = results_df['algorithm'].apply(lambda x: str(x)[:str(x).find('(')])
+        results_df['features'] = results_df['features'].apply(lambda x: str(len(x)) + ': ' + str(x).replace('(','').replace(')',''))
+        results_df = results_df.drop(['confusion_matrix', 'train_order', 'n_features'], axis=1)
+        return results_df
+        
     def getResults(self, buffer=True):
         if buffer and self.results is not None:
             return self.results
