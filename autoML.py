@@ -208,8 +208,10 @@ def gen_first_people(n_features, n_algos, n_bits_algos):
 
 def ga_toolbox(automl_obj):
     #genetics algorithm: creating types
-    creator.create("FitnessMax", base.Fitness, weights=(1.0,))
-    creator.create("Individual", list, fitness=creator.FitnessMax)
+    with warnings.catch_warnings(): #TODO: solve RuntimeWarning: A class named 'FitnessMax' has already been created...
+        warnings.simplefilter("ignore")
+        creator.create("FitnessMax", base.Fitness, weights=(1.0,))
+        creator.create("Individual", list, fitness=creator.FitnessMax)
     #multiprocessing
     toolbox = base.Toolbox()
     if not(automl_obj.pool is None):
@@ -357,10 +359,13 @@ class AutoML:
         if self.YisCategorical():
             print('ML problem type: Classification')
             #encoding
-            self.__y_encoder = OrdinalEncoder(dtype=int)
-            self.y_full = pd.DataFrame(self.__y_encoder.fit_transform(self.y_full), columns=[self.y_colname])
+            if self.Ytype() != np.int64: #optimization avoid encoder for int64
+                self.__y_encoder = OrdinalEncoder(dtype=int)
+                self.y_full = pd.DataFrame(self.__y_encoder.fit_transform(self.y_full), columns=[self.y_colname])
+
             self.y_classes = np.sort(self.y_full[self.y_colname].unique())
             self.y_is_binary = len(self.y_classes) == 2
+
             if not self.y_is_binary: #multiclass 
                 #adjusting the metrics for multiclass target
                 for i, m in enumerate(self.metrics_classification_list):
@@ -481,6 +486,9 @@ class AutoML:
         title += ' (' + str(result.n_features) +' features)'
         title += '\n' + str(result.params)
         categories = self.y_classes#['Zero', 'One']
+        if self.__y_encoder is not None:
+            categories = self.__y_encoder.categories_[0]
+            
         group_names = [] #['True Neg','False Pos','False Neg','True Pos']
         for c in categories:
             group_names.append('True_' + str(c)) 
@@ -584,6 +592,9 @@ class AutoML:
         #else:
         return self.metrics_regression_list
     
+    def Ytype(self):
+        return type(self.y_full.iloc[0,0])
+    
     def YisCategorical(self) -> bool:
         y_type = type(self.y_full.iloc[0,0])
         
@@ -635,6 +646,7 @@ def testAutoML(ds, y_colname):
 if __name__ == '__main__':
     #pool = Pool(processes=10)
     automl = AutoML(util.getDSIris(), 'class'
+    #automl = AutoML(util.getDSWine_RED(), 'quality'
                     , min_x_y_correlation_rate=0.01
                     #, pool=pool
                     , ngen=1
@@ -646,3 +658,4 @@ if __name__ == '__main__':
     print(automl.getResults())
     print(automl.getBestResult())
     print(automl.getBestConfusionMatrix())
+    print('finish')
