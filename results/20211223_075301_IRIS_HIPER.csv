@@ -1,0 +1,19 @@
+algorithm,params,features,n_features,train_time,predict_time,mem_max,f1_weighted,balanced_accuracy,roc_auc_ovr_weighted,confusion_matrix
+<class 'sklearn.neighbors._classification.KNeighborsClassifier'>,"OrderedDict([('n_jobs', -1), ('n_neighbors', 5), ('p', 3)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.005736800000001097,0.007103189999999889,1897.7265625,0.9665831244778613,0.9666666666666667,1.0,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  1  9]]"
+<class 'sklearn.neighbors._classification.KNeighborsClassifier'>,"OrderedDict([('n_jobs', -1), ('n_neighbors', 3), ('p', 3)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.0027573999999930265,0.006077923333333028,1898.5390625,0.9665831244778613,0.9666666666666667,0.9966666666666666,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  1  9]]"
+<class 'sklearn.neighbors._classification.KNeighborsClassifier'>,"OrderedDict([('n_jobs', -1), ('n_neighbors', 5), ('p', 2)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.003135700000001407,0.004920359999999846,1900.8125,0.9665831244778613,0.9666666666666667,1.0,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  1  9]]"
+<class 'sklearn.neighbors._classification.KNeighborsClassifier'>,"OrderedDict([('n_jobs', -1), ('n_neighbors', 7), ('p', 3)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.0027185999999943533,0.00457256666666647,1903.7421875,0.9665831244778613,0.9666666666666667,1.0,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  1  9]]"
+<class 'sklearn.neighbors._classification.KNeighborsClassifier'>,"OrderedDict([('n_jobs', -1), ('n_neighbors', 7), ('p', 2)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.002496299999990015,0.0047768999999997655,1905.77734375,0.9665831244778613,0.9666666666666667,1.0,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  1  9]]"
+<class 'sklearn.neighbors._classification.KNeighborsClassifier'>,"OrderedDict([('n_jobs', -1), ('n_neighbors', 3), ('p', 2)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.0025175999999902388,0.006218746666666656,1907.45703125,0.9665831244778613,0.9666666666666667,0.9983333333333334,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  1  9]]"

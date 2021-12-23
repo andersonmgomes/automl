@@ -1,0 +1,19 @@
+algorithm,params,features,n_features,train_time,predict_time,mem_max,f1_weighted,balanced_accuracy,roc_auc_ovr_weighted,confusion_matrix
+<class 'sklearn.neighbors._classification.KNeighborsClassifier'>,"OrderedDict([('n_jobs', -1), ('n_neighbors', 5), ('p', 3)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.0030929999999997904,0.004882186666666636,1896.84375,0.9333333333333333,0.9333333333333332,0.9933333333333333,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  1  9]]"
+<class 'sklearn.neighbors._classification.KNeighborsClassifier'>,"OrderedDict([('n_jobs', -1), ('n_neighbors', 3), ('p', 3)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.008403600000001177,0.008415403333333415,1898.27734375,0.9333333333333333,0.9333333333333332,0.9933333333333333,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  1  9]]"
+<class 'sklearn.neighbors._classification.KNeighborsClassifier'>,"OrderedDict([('n_jobs', -1), ('n_neighbors', 5), ('p', 2)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.006990200000004165,0.00892254000000013,1898.32421875,0.9333333333333333,0.9333333333333332,0.9933333333333333,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  1  9]]"
+<class 'sklearn.neighbors._classification.KNeighborsClassifier'>,"OrderedDict([('n_jobs', -1), ('n_neighbors', 7), ('p', 3)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.0039054000000078304,0.007703159999999798,1899.6640625,0.9333333333333333,0.9333333333333332,0.9966666666666668,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  1  9]]"
+<class 'sklearn.neighbors._classification.KNeighborsClassifier'>,"OrderedDict([('n_jobs', -1), ('n_neighbors', 7), ('p', 2)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.002556299999994849,0.004365683333333455,1903.31640625,0.9333333333333333,0.9333333333333332,0.995,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  1  9]]"
+<class 'sklearn.neighbors._classification.KNeighborsClassifier'>,"OrderedDict([('n_jobs', -1), ('n_neighbors', 3), ('p', 2)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.0027860999999944625,0.004969893333333175,1905.33984375,0.9333333333333333,0.9333333333333332,0.9933333333333333,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  1  9]]"

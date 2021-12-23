@@ -3,7 +3,7 @@ import time
 import warnings
 from datetime import datetime
 from multiprocessing import Pool
-
+import inspect
 import numpy as np
 import pandas as pd
 import scipy.stats as sta
@@ -81,12 +81,28 @@ def evaluation(individual, automl_obj):
             float_value = -1
         return [int(float_value*100000)]
     
+    def is_Voting_or_Stacking(a):
+        return ((a == VotingClassifier) or (a == StackingClassifier)
+                or isinstance(a, VotingClassifier) or isinstance(a, StackingClassifier))
+
     #print(individual)
     
-    algo = individual[-automl_obj.n_bits_algos:]
-    algo = bautil.ba2int(bitarray(algo)) % len(automl_obj.selected_algos)
-    
-    algo = automl_obj.selected_algos[algo]
+    algo_instance = individual[-automl_obj.n_bits_algos:]
+    # in this point the variable algo_instance is a bitarray
+    algo_instance = bautil.ba2int(bitarray(algo_instance)) % len(automl_obj.selected_algos)
+    # in this point the variable algo_instance is an integer
+    algo_instance =  automl_obj.selected_algos[algo_instance]
+    # in this point the variavles algo_instance is a Class
+    #init_params = automl_obj.algorithms[algo_instance]
+    # in this point the variable init_params is a map with full parameters options
+    #transforming the map into a map of parameters with the default value (first element)
+    #considering only the first value for each parameter
+    #init_params = {key:init_params[key][0] for key in init_params.keys()}
+    if is_Voting_or_Stacking(algo_instance):
+        algo_instance = algo_instance(estimators=[])
+    else:
+        algo_instance = algo_instance()#(**init_params)
+    # in this point the variable algo_instance is a object with the default parameters
     
     col_tuple = individual[:len(automl_obj.X_bitmap)-automl_obj.n_bits_algos]
     col_tuple = tuple([automl_obj.X_train.columns[i] for i, c in enumerate(col_tuple) if c == 1])
@@ -94,21 +110,23 @@ def evaluation(individual, automl_obj):
     if len(col_tuple)==0:
         return float2bigint(-1)
     
-    def is_ensemble(a):
-        return isinstance(a, VotingClassifier) or isinstance(a, StackingClassifier)
-    
-    if is_ensemble(algo):
+    if is_Voting_or_Stacking(algo_instance):
         #getting the top 3 best results group by algorithm
         best_estimators = []
         automl_obj.results.sort_values(by=automl_obj.main_metric, ascending=False, inplace=True)
         for row in automl_obj.results.iterrows():
             if len(best_estimators)==3:
                 break
-            candidate_algo = row[1]['algorithm']
-            if ((candidate_algo not in best_estimators)
-                and (not is_ensemble(candidate_algo))):
+            candidate_algo = row[1]['algorithm']()
+            candidate_algo.set_params(**row[1]['params'])
+            if ((candidate_algo.__class__ not in [x.__class__ for x in best_estimators])
+                and (not is_Voting_or_Stacking(candidate_algo))):
                 best_estimators.append(candidate_algo)
-        algo.estimators = list(zip(['e'+str(i) for i in range(1,len(best_estimators)+1)],best_estimators))
+        
+        if len(best_estimators)<2:
+            return float2bigint(-1)
+        #else
+        algo_instance.estimators = list(zip(['e'+str(i) for i in range(1,len(best_estimators)+1)],best_estimators))
         
     X_train2 = automl_obj.X_train[list(col_tuple)]
     X_test2 = automl_obj.X_test[list(col_tuple)]
@@ -123,29 +141,33 @@ def evaluation(individual, automl_obj):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         if automl_obj.grid_search:
-            opt = GridSearchCV(estimator=algo, param_grid=automl_obj.algorithms[algo]
-                                , scoring=automl_obj.main_metric
-                                , cv=5
-                                , verbose=0, n_jobs=-1
-                                )
+            opt = GridSearchCV(estimator=algo_instance
+                               , param_grid=automl_obj.algorithms[algo_instance.__class__]
+                               , scoring=automl_obj.main_metric
+                               , cv=5
+                               , verbose=0, n_jobs=-1
+                               )
         else:
-            opt = BayesSearchCV(estimator=algo, search_spaces=automl_obj.algorithms[algo]
+            opt = BayesSearchCV(estimator=algo_instance
+                                , search_spaces=automl_obj.algorithms[algo_instance.__class__]
                                 , scoring=automl_obj.main_metric
-                                , n_iter=30, cv=5
+                                , n_iter=automl_obj.n_inter_bayessearch, cv=5
                                 , verbose=0, n_jobs=-1, random_state=automl_obj.RANDOM_STATE
                                 )
         opt.fit(X_train2, automl_obj.y_train)
 
     def fit_score():
-        estimator = algo.set_params(**params)
-        row = {'algorithm': estimator
+        estimator = algo_instance.set_params(**params)
+        row = {'algorithm': estimator.__class__
                , 'params': params
                , 'features': col_tuple
                , 'n_features': len(col_tuple)
                }
 
         t0 = time.perf_counter()
-        estimator.fit(X_train2, automl_obj.y_train)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")        
+            estimator.fit(X_train2, automl_obj.y_train)
         row['train_time'] = time.perf_counter() - t0 #train_time
         
         t0 = time.perf_counter()
@@ -165,7 +187,7 @@ def evaluation(individual, automl_obj):
     #dataframe format: ['algorithm', 'params', 'features', 'n_features', 'train_time', 'predict_time', 'mem_max', <metrics>]
     for params in opt.cv_results_['params']:
         #seeking for some previous result
-        previous_result = automl_obj.results[(automl_obj.results['algorithm'] == algo) 
+        previous_result = automl_obj.results[(automl_obj.results['algorithm'] == algo_instance.__class__) 
                                              & (automl_obj.results['params'] == params)
                                             & (automl_obj.results['features'] == col_tuple)]
         if previous_result.shape[0]>0:
@@ -186,7 +208,7 @@ def evaluation(individual, automl_obj):
             
         log_msg = '   *Model trained: ' + str(scoring_list[0]) 
         log_msg += ' = {:.5f}'.format(row_result[automl_obj.main_metric]) 
-        log_msg += ' | ' + str(algo)[:str(algo).find('(')] 
+        log_msg += ' | ' + str(algo_instance)[:str(algo_instance).find('(')] 
         log_msg += ' | ' + str(len(col_tuple)) + ' features' 
         log_msg += ' | ' + str(params)[str(params).find('[')+1:str(params).find(']')]
 
@@ -234,41 +256,45 @@ class AutoML:
     ALGORITHMS = {
         #classifiers
         #https://scikit-learn.org/stable/auto_examples/classification/plot_classifier_comparison.html
-        KNeighborsClassifier(n_jobs=-1): 
+        KNeighborsClassifier: 
             {"n_neighbors": [3,5,7,9,11,13,15,17],
              "p": [2, 3],
+             "n_jobs": [-1],
              },
-        SVC(probability=True):
+        SVC:
             {"C": [0.001, 0.01, 0.1, 1, 10, 100, 1000],
              "gamma": ["auto", "scale"],
-             "class_weight": ["balanced", None]},
-        GaussianProcessClassifier(n_jobs=-1):{
+             "class_weight": ["balanced", None],
+             "probability": [True]},
+        GaussianProcessClassifier:{
             "copy_X_train": [False],
-            "warm_start": [True, False],},
-        DecisionTreeClassifier():{
+            "warm_start": [True, False],
+            "n_jobs": [-1],},
+        DecisionTreeClassifier:{
             "criterion": ["gini", "entropy"],
             },
-        RandomForestClassifier(n_jobs=-1):{
+        RandomForestClassifier:{
             "n_estimators": [120,300,500,800,1200],
             "max_depth": [None, 5, 8, 15, 20, 25, 30],
             "min_samples_split": [2, 5, 10, 15, 100],
             "min_samples_leaf": [1, 2, 5, 10],
             "max_features": [None, "sqrt", "log2"],
+            "n_jobs": [-1],
             },
-        MLPClassifier():{
+        MLPClassifier:{
             "learning_rate": ['constant', 'invscaling', 'adaptive'], 
             'momentum' : [0.1, 0.5, 0.9], 
             },
-        AdaBoostClassifier():{
+        AdaBoostClassifier:{
             "algorithm": ["SAMME", "SAMME.R"],
             },
-        GaussianNB():{
+        GaussianNB:{
             "priors": [None],
             },
-        QuadraticDiscriminantAnalysis():{
+        QuadraticDiscriminantAnalysis:{
             "priors": [None],
             },
-        XGBClassifier(use_label_encoder=False, eval_metric='mlogloss'):{
+        XGBClassifier:{
             "eta": [0.01, 0.015, 0.025, 0.05, 0.1],
             "gamma": [0.05, 0.1, 0.3, 0.5, 0.7, 0.9, 1],
             "max_depth": [3, 5, 7, 9, 12, 15, 17, 25],
@@ -277,37 +303,43 @@ class AutoML:
             "colsample_bytree": [0.6, 0.7, 0.8, 0.9, 1],
             "lambda": [0.01,0.1,1],
             "alpha": [0, 0.1, 0.5, 1],
+            "use_label_encoder": [False],
+            "eval_metric": ['mlogloss'],
             },
-        MultinomialNB():{
+        MultinomialNB:{
             "fit_prior": [True, False],
             }, 
-        GradientBoostingClassifier():{
+        GradientBoostingClassifier:{
             "loss": ["deviance"],
             },
-        HistGradientBoostingClassifier():{
+        HistGradientBoostingClassifier:{
             "warm_start": [True, False],
             },
         #TPOTClassifier(verbosity=0, n_jobs=-1):{},
-        linear_model.LinearRegression(n_jobs=-1):{
+        linear_model.LinearRegression:{
             "fit_intercept": [True, False],
+            "n_jobs": [-1],
             },
-        linear_model.LogisticRegression(n_jobs=-1):{
+        linear_model.LogisticRegression:{
             "C": [0.001, 0.01, 0.1, 1, 10,
                   100, 1000],
+            "n_jobs": [-1],
             },
-        VotingClassifier(estimators=[], n_jobs=-1):{
+        VotingClassifier:{
             "voting": ["soft"],
+            "n_jobs": [-1],
             },
-        StackingClassifier(estimators=[], n_jobs=-1):{
+        StackingClassifier:{
             "stack_method": ["auto"],
+            "n_jobs": [-1],
             },
         #regressors        
-        XGBRegressor():{},
-        XGBRFRegressor():{},
-        svm.SVR():{},
-        tree.DecisionTreeRegressor():{},
-        neighbors.KNeighborsRegressor():{},
-        GradientBoostingRegressor():{},    
+        XGBRegressor:{},
+        XGBRFRegressor:{},
+        svm.SVR:{},
+        tree.DecisionTreeRegressor:{},
+        neighbors.KNeighborsRegressor:{},
+        GradientBoostingRegressor:{},    
     }    
     
     def __init__(self, ds_source, y_colname = 'y'
@@ -320,6 +352,7 @@ class AutoML:
                  , metrics = None
                  , features_engineering = True
                  , grid_search = False
+                 , n_inter_bayessearch = 30
                  ) -> None:
         self.start_time = datetime.now()
         #ray.init(ignore_reinit_error=True)
@@ -339,6 +372,7 @@ class AutoML:
         self.ngen = ngen
         self.pool = pool
         self.grid_search = grid_search
+        self.n_inter_bayessearch = n_inter_bayessearch
         
         print('Original dataset dimensions:', ds_source.shape)
         #NaN values
@@ -359,9 +393,8 @@ class AutoML:
         if self.YisCategorical():
             print('ML problem type: Classification')
             #encoding
-            if self.Ytype() != np.int64: #optimization avoid encoder for int64
-                self.__y_encoder = OrdinalEncoder(dtype=int)
-                self.y_full = pd.DataFrame(self.__y_encoder.fit_transform(self.y_full), columns=[self.y_colname])
+            self.__y_encoder = OrdinalEncoder(dtype=int)
+            self.y_full = pd.DataFrame(self.__y_encoder.fit_transform(self.y_full), columns=[self.y_colname])
 
             self.y_classes = np.sort(self.y_full[self.y_colname].unique())
             self.y_is_binary = len(self.y_classes) == 2
@@ -480,9 +513,8 @@ class AutoML:
         if self.YisContinuous():
             return None
         #else: classification problem
-        result = self.getResults().iloc[result_index]
-        title=str(result.algorithm)
-        title = title[:title.find('(')]
+        result = self.__fit().iloc[result_index]
+        title = self.__class2str(result.algorithm)
         title += ' (' + str(result.n_features) +' features)'
         title += '\n' + str(result.params)
         categories = self.y_classes#['Zero', 'One']
@@ -504,23 +536,28 @@ class AutoML:
                                      , custom_metrics=custom_metrics);    
                 
     def getBestResult(self):
-        if len(self.getResults()) == 0:
+        if len(self.__fit()) == 0:
             return None
         #else
-        return self.getResults().iloc[0]
+        return self.__fit().iloc[0]
     
-    def getResults_4Print(self, buffer=True):
-        results_df = self.getResults(buffer)
-        results_df['algorithm'] = results_df['algorithm'].apply(lambda x: str(x)[:str(x).find('(')])
+    def getResults(self, buffer=True):
+        results_df = self.__fit(buffer)
+        results_df['algorithm'] = results_df['algorithm'].apply(lambda x: self.__class2str(x))
         results_df['features'] = results_df['features'].apply(lambda x: str(len(x)) + ': ' + str(x).replace('(','').replace(')',''))
         results_df = results_df.drop(['confusion_matrix', 'train_order', 'n_features'], axis=1)
         return results_df
-        
-    def getResults(self, buffer=True):
+
+    def __class2str(self, cls):
+        cls_str = str(cls)
+        return cls_str[cls_str.rfind('.')+1:cls_str.rfind("'")] 
+            
+    def __fit(self, buffer=True):
         if buffer and self.results is not None:
             return self.results
                    
         #else to get results
+        t0 = time.perf_counter()
         #dataframe format: ['algorithm', 'params', 'features', 'n_features', 'train_time', 'predict_time', 'mem_max', <metrics>]
         columns_list = ['algorithm', 'params', 'features', 'n_features', 'train_time', 'predict_time', 'mem_max']
         
@@ -535,19 +572,23 @@ class AutoML:
         y_is_num = not y_is_cat
 
         self.selected_algos = []
-
+        
+        def is_in_class_tree(cls1, cls2):
+            #vide https://docs.python.org/3/library/inspect.html
+            return cls1 in inspect.getmro(cls2)
+        
         for algo in self.algorithms.keys():
-            if  ((y_is_cat and isinstance(algo, RegressorMixin)) #Y is incompatible with algorithm        
-                 or (y_is_num and isinstance(algo, ClassifierMixin))#Y is incompatible with algorithm
+            if  ((y_is_cat and is_in_class_tree(RegressorMixin, algo)) #Y is incompatible with algorithm        
+                 or (y_is_num and is_in_class_tree(ClassifierMixin, algo))#Y is incompatible with algorithm
             ):
                 continue
             #else: all right
             self.selected_algos.append(algo)
         
-        print('Selected algorithms:', [str(x)[:str(x).find('(')] for x in self.selected_algos])
+        print('Selected algorithms:', [self.__class2str(x) for x in self.selected_algos])
         
         #setup the bitmap to genetic algorithm
-        self.n_bits_algos = len(bautil.int2ba(len(self.selected_algos)-1))
+        self.n_bits_algos = len(bautil.int2ba(len(self.selected_algos)-1))#TODO: analyze de number of bits to use
         self.n_cols = self.X_train.shape[1] + self.n_bits_algos
         self.X_bitmap = bitarray(self.n_cols)
         self.X_bitmap.setall(1)
@@ -564,7 +605,7 @@ class AutoML:
             if math.isinf(n_train_sets):
                 break
 
-        print('Nº of training possible combinations:'
+        print('Nº of training possible basic combinations:'
               , n_train_sets*len(self.selected_algos)
               , '(' + str(n_train_sets),'features combinations,'
               , str(len(self.selected_algos)) +' algorithms)')
@@ -584,6 +625,7 @@ class AutoML:
         self.results.sort_values(by=[self.main_metric, 'predict_time'], ascending=[False,True], inplace=True)
         self.results = self.results.rename_axis('train_order').reset_index()        
 
+        print('Fit Time (GA):', int(time.perf_counter() - t0), 's')
         return self.results
     
     def getMetrics(self):
@@ -636,7 +678,7 @@ def testAutoML(ds, y_colname):
     if automl.YisCategorical():
         print(automl.getBestResult().confusion_matrix)
     
-    df4print = automl.getResults()
+    df4print = automl.__fit()
     print(df4print.head())
     print(automl.getBestResult())
     if automl.getBestResult() is not None:
@@ -650,11 +692,14 @@ if __name__ == '__main__':
                     , min_x_y_correlation_rate=0.01
                     #, pool=pool
                     , ngen=1
-                    , ds_name='iris_HIPER'
-                    , algorithms={KNeighborsClassifier(n_jobs=-1): 
-                        {"n_neighbors": [3,5,7,9,11,13,15,17],
-                         "p": [2, 3],},}
-                    , features_engineering=False)
+                    , ds_name='iris'
+                    #, algorithms={KNeighborsClassifier: 
+                    #    {"n_neighbors": [3,5,7]
+                    #     , "p": [2, 3]
+                    #     , "n_jobs": [-1]}
+                    #    , XGBRFRegressor:{}}
+                    , features_engineering=False
+                    , n_inter_bayessearch=1)
     print(automl.getResults())
     print(automl.getBestResult())
     print(automl.getBestConfusionMatrix())

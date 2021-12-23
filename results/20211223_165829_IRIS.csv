@@ -1,0 +1,52 @@
+algorithm,params,features,n_features,train_time,predict_time,mem_max,f1_weighted,balanced_accuracy,roc_auc_ovr_weighted,confusion_matrix
+<class 'sklearn.discriminant_analysis.QuadraticDiscriminantAnalysis'>,"OrderedDict([('priors', None)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.002625399999999445,0.0003840833333337438,1936.82421875,1.0,1.0,1.0,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  0 10]]"
+<class 'sklearn.svm._classes.SVC'>,"OrderedDict([('C', 1000.0), ('class_weight', None), ('gamma', 'scale'), ('probability', True)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.004767700000002151,0.00035190666666669773,1718.546875,0.9326599326599326,0.9333333333333332,0.95,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  2  8]]"
+<class 'sklearn.neural_network._multilayer_perceptron.MLPClassifier'>,"OrderedDict([('learning_rate', 'invscaling'), ('momentum', 0.5)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.1418582000000015,0.00032811999999988,1929.87890625,0.9326599326599326,0.9333333333333332,0.9900000000000001,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  2  8]]"
+<class 'sklearn.naive_bayes.GaussianNB'>,"OrderedDict([('priors', None)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.0035510999999956994,0.0003558366666666757,1934.953125,0.9326599326599326,0.9333333333333332,0.9900000000000001,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  2  8]]"
+<class 'sklearn.linear_model._logistic.LogisticRegression'>,"OrderedDict([('C', 1000.0), ('n_jobs', -1)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.03490640000001122,0.0003183200000004642,2024.3046875,0.9326599326599326,0.9333333333333332,1.0,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  2  8]]"
+<class 'sklearn.ensemble._voting.VotingClassifier'>,"OrderedDict([('n_jobs', -1), ('voting', 'soft')])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.023534599999976535,0.005149110000000216,2062.46484375,0.9326599326599326,0.9333333333333332,1.0,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  2  8]]"
+<class 'sklearn.ensemble._stacking.StackingClassifier'>,"OrderedDict([('n_jobs', -1), ('stack_method', 'auto')])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.11713560000001166,0.005648590000000316,2070.171875,0.9326599326599326,0.9333333333333332,1.0,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  2  8]]"
+<class 'sklearn.neighbors._classification.KNeighborsClassifier'>,"OrderedDict([('n_jobs', -1), ('n_neighbors', 11), ('p', 3)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.0025636999999996135,0.005275033333333331,1373.21484375,0.9326599326599326,0.9333333333333332,1.0,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  2  8]]"
+<class 'xgboost.sklearn.XGBClassifier'>,"OrderedDict([('alpha', 1.0), ('colsample_bytree', 0.8), ('eta', 0.05), ('eval_metric', 'mlogloss'), ('gamma', 0.05), ('lambda', 0.1), ('max_depth', 15), ('min_child_weight', 5), ('subsample', 0.6), ('use_label_encoder', False)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.10491389999998546,0.0009476066666659714,2005.7421875,0.8976982097186702,0.9,1.0,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  3  7]]"
+<class 'sklearn.gaussian_process._gpc.GaussianProcessClassifier'>,"OrderedDict([('copy_X_train', False), ('n_jobs', -1), ('warm_start', True)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.024063400000002844,0.002820103333333416,1884.0,0.8976982097186702,0.9,0.9733333333333333,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  3  7]]"
+<class 'sklearn.ensemble._weight_boosting.AdaBoostClassifier'>,"OrderedDict([('algorithm', 'SAMME.R')])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.09244660000000238,0.0012116466666668656,1934.3984375,0.8976982097186702,0.9,0.9666666666666667,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  3  7]]"
+<class 'xgboost.sklearn.XGBClassifier'>,"OrderedDict([('alpha', 1.0), ('colsample_bytree', 0.8), ('eta', 0.05), ('eval_metric', 'mlogloss'), ('gamma', 0.05), ('lambda', 0.1), ('max_depth', 15), ('min_child_weight', 5), ('subsample', 0.6), ('use_label_encoder', False)])","('sepal_length', 'petal_length', 'petal_width')",3,0.10558720000000221,0.0009114466666668857,2105.3828125,0.8976982097186702,0.9,1.0,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  3  7]]"
+<class 'sklearn.tree._classes.DecisionTreeClassifier'>,"OrderedDict([('criterion', 'gini')])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.002409299999996506,0.0003356100000000121,1893.9453125,0.861111111111111,0.8666666666666667,0.9,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  4  6]]"
+<class 'sklearn.ensemble._gb.GradientBoostingClassifier'>,"OrderedDict([('loss', 'deviance')])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.24014350000001627,0.0004291666666669395,2010.9296875,0.861111111111111,0.8666666666666667,1.0,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  4  6]]"
+<class 'sklearn.ensemble._hist_gradient_boosting.gradient_boosting.HistGradientBoostingClassifier'>,"OrderedDict([('warm_start', True)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.4002651000000128,0.001947936666666313,2021.22265625,0.861111111111111,0.8666666666666667,0.9883333333333333,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  4  6]]"
+<class 'sklearn.ensemble._forest.RandomForestClassifier'>,"OrderedDict([('max_depth', 30), ('max_features', 'sqrt'), ('min_samples_leaf', 10), ('min_samples_split', 10), ('n_estimators', 120), ('n_jobs', -1)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.27451839999999095,0.006821483333333352,1926.6875,0.8222222222222222,0.8333333333333334,1.0,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  5  5]]"
+<class 'sklearn.naive_bayes.MultinomialNB'>,"OrderedDict([('fit_prior', True)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.0032315999999923406,0.0003461033333337582,2005.50390625,0.7618679050567595,0.7666666666666666,0.8316666666666667,"[[9 1 0]
+ [0 5 5]
+ [0 1 9]]"

@@ -1,0 +1,106 @@
+algorithm,params,features,n_features,train_time,predict_time,mem_max,f1_weighted,balanced_accuracy,roc_auc_ovr_weighted,confusion_matrix
+<class 'sklearn.neighbors._classification.KNeighborsClassifier'>,"OrderedDict([('n_jobs', -1), ('n_neighbors', 11), ('p', 3)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.0035881000000017593,0.005631389999999689,1941.8046875,0.9333333333333333,0.9333333333333332,0.9966666666666666,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  1  9]]"
+<class 'sklearn.neighbors._classification.KNeighborsClassifier'>,"OrderedDict([('n_jobs', -1), ('n_neighbors', 5), ('p', 3)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.002602599999988797,0.005408166666666621,1974.7734375,0.9333333333333333,0.9333333333333332,0.9966666666666666,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  1  9]]"
+<class 'sklearn.neighbors._classification.KNeighborsClassifier'>,"OrderedDict([('n_jobs', -1), ('n_neighbors', 7), ('p', 2)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.0025420000000053733,0.009465723333333642,1977.41015625,0.9665831244778613,0.9666666666666667,0.9966666666666666,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  0 10]]"
+<class 'sklearn.neighbors._classification.KNeighborsClassifier'>,"OrderedDict([('n_jobs', -1), ('n_neighbors', 15), ('p', 3)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.005101299999992648,0.0061620333333332646,1979.02734375,0.9333333333333333,0.9333333333333332,0.9966666666666667,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  1  9]]"
+<class 'sklearn.neighbors._classification.KNeighborsClassifier'>,"OrderedDict([('n_jobs', -1), ('n_neighbors', 13), ('p', 3)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.002603399999998146,0.005243853333332993,1981.671875,0.9333333333333333,0.9333333333333332,0.9966666666666667,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  1  9]]"
+<class 'sklearn.neighbors._classification.KNeighborsClassifier'>,"OrderedDict([('n_jobs', -1), ('n_neighbors', 9), ('p', 3)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.0031879000000003543,0.005376923333332684,1984.4921875,0.9665831244778613,0.9666666666666667,0.9966666666666666,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  0 10]]"
+<class 'sklearn.neighbors._classification.KNeighborsClassifier'>,"OrderedDict([('n_jobs', -1), ('n_neighbors', 11), ('p', 2)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.004062199999992799,0.009226326666667244,1985.890625,0.9665831244778613,0.9666666666666667,0.9966666666666666,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  0 10]]"
+<class 'sklearn.neighbors._classification.KNeighborsClassifier'>,"OrderedDict([('n_jobs', -1), ('n_neighbors', 15), ('p', 2)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.00521209999999428,0.006002063333333278,1987.59375,0.9665831244778613,0.9666666666666667,0.9966666666666667,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  0 10]]"
+<class 'sklearn.neighbors._classification.KNeighborsClassifier'>,"OrderedDict([('n_jobs', -1), ('n_neighbors', 5), ('p', 2)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.002689500000002454,0.008103386666667234,1990.19921875,0.9333333333333333,0.9333333333333332,0.9966666666666666,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  1  9]]"
+<class 'sklearn.neighbors._classification.KNeighborsClassifier'>,"OrderedDict([('n_jobs', -1), ('n_neighbors', 7), ('p', 3)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.002857099999999946,0.005326439999999859,1991.62890625,0.9665831244778613,0.9666666666666667,0.9983333333333334,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  0 10]]"
+<class 'sklearn.neighbors._classification.KNeighborsClassifier'>,"OrderedDict([('n_jobs', -1), ('n_neighbors', 17), ('p', 3)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.002572899999989886,0.006492836666666335,1992.62109375,0.9665831244778613,0.9666666666666667,0.9966666666666666,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  0 10]]"
+<class 'sklearn.neighbors._classification.KNeighborsClassifier'>,"OrderedDict([('n_jobs', -1), ('n_neighbors', 3), ('p', 3)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.0028732000000104563,0.0052427399999999125,1995.4609375,0.9333333333333333,0.9333333333333332,0.9733333333333334,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  1  9]]"
+<class 'sklearn.neighbors._classification.KNeighborsClassifier'>,"OrderedDict([('n_jobs', -1), ('n_neighbors', 9), ('p', 2)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.002378699999979972,0.005089080000000005,1998.859375,0.9333333333333333,0.9333333333333332,0.9966666666666666,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  1  9]]"
+<class 'sklearn.neighbors._classification.KNeighborsClassifier'>,"OrderedDict([('n_jobs', -1), ('n_neighbors', 17), ('p', 2)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.003599999999977399,0.005071403333333061,2000.81640625,0.9665831244778613,0.9666666666666667,0.9966666666666666,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  0 10]]"
+<class 'sklearn.neighbors._classification.KNeighborsClassifier'>,"OrderedDict([('n_jobs', -1), ('n_neighbors', 3), ('p', 2)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.002627200000006269,0.0049488199999994245,2004.22265625,0.9333333333333333,0.9333333333333332,0.9733333333333334,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  1  9]]"
+<class 'sklearn.neighbors._classification.KNeighborsClassifier'>,"OrderedDict([('n_jobs', -1), ('n_neighbors', 13), ('p', 2)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.0027562999999872773,0.009970129999999244,2006.01953125,0.9333333333333333,0.9333333333333332,0.9966666666666668,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  1  9]]"
+<class 'sklearn.svm._classes.SVC'>,"OrderedDict([('C', 1000.0), ('class_weight', None), ('gamma', 'scale'), ('probability', True)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.003940300000010666,0.0003696733333337458,2016.29296875,0.9665831244778613,0.9666666666666667,0.9666666666666667,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  0 10]]"
+<class 'sklearn.svm._classes.SVC'>,"OrderedDict([('C', 100.0), ('class_weight', 'balanced'), ('gamma', 'scale'), ('probability', True)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.009610899999984213,0.0007788299999996677,2016.2421875,0.9665831244778613,0.9666666666666667,0.9766666666666667,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  0 10]]"
+<class 'sklearn.svm._classes.SVC'>,"OrderedDict([('C', 1.0), ('class_weight', 'balanced'), ('gamma', 'auto'), ('probability', True)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.00795940000000428,0.0004024999999993876,2016.25,0.9665831244778613,0.9666666666666667,0.9966666666666666,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  1  9]]"
+<class 'sklearn.svm._classes.SVC'>,"OrderedDict([('C', 100.0), ('class_weight', None), ('gamma', 'scale'), ('probability', True)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.003877500000044165,0.0003862866666660617,2016.2890625,0.9665831244778613,0.9666666666666667,0.9733333333333333,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  0 10]]"
+<class 'sklearn.svm._classes.SVC'>,"OrderedDict([('C', 10.0), ('class_weight', None), ('gamma', 'scale'), ('probability', True)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.004201899999998204,0.0003516199999997601,2016.7734375,0.9665831244778613,0.9666666666666667,0.9983333333333333,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  0 10]]"
+<class 'sklearn.svm._classes.SVC'>,"OrderedDict([('C', 10.0), ('class_weight', 'balanced'), ('gamma', 'scale'), ('probability', True)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.007114000000001397,0.0005699499999991531,2016.44140625,0.9665831244778613,0.9666666666666667,0.9983333333333333,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  0 10]]"
+<class 'sklearn.svm._classes.SVC'>,"OrderedDict([('C', 0.001), ('class_weight', None), ('gamma', 'auto'), ('probability', True)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.006841600000029757,0.00044639333333407194,2016.76171875,0.9665831244778613,0.9666666666666667,0.07333333333333333,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  1  9]]"
+<class 'sklearn.svm._classes.SVC'>,"OrderedDict([('C', 100.0), ('class_weight', None), ('gamma', 'auto'), ('probability', True)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.0034492999999997664,0.0006325199999992037,2016.34765625,0.9665831244778613,0.9666666666666667,0.9983333333333333,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  0 10]]"
+<class 'sklearn.svm._classes.SVC'>,"OrderedDict([('C', 0.1), ('class_weight', 'balanced'), ('gamma', 'auto'), ('probability', True)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.00724209999998493,0.00040876333333320265,2016.45703125,0.9665831244778613,0.9666666666666667,0.8316666666666667,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  1  9]]"
+<class 'sklearn.svm._classes.SVC'>,"OrderedDict([('C', 0.01), ('class_weight', None), ('gamma', 'scale'), ('probability', True)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.012130200000001423,0.0004170799999997143,2016.15625,0.9665831244778613,0.9666666666666667,0.98,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  1  9]]"
+<class 'sklearn.svm._classes.SVC'>,"OrderedDict([('C', 0.01), ('class_weight', 'balanced'), ('gamma', 'auto'), ('probability', True)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.006775000000004638,0.00044278333333333346,2016.328125,0.9665831244778613,0.9666666666666667,0.16166666666666665,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  1  9]]"
+<class 'sklearn.svm._classes.SVC'>,"OrderedDict([('C', 1.0), ('class_weight', None), ('gamma', 'scale'), ('probability', True)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.00346110000009503,0.0003937933333342395,2016.0078125,0.9665831244778613,0.9666666666666667,0.9966666666666666,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  0 10]]"
+<class 'sklearn.svm._classes.SVC'>,"OrderedDict([('C', 1000.0), ('class_weight', None), ('gamma', 'auto'), ('probability', True)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.0036510999999563865,0.00035379333333291165,2016.1875,0.9665831244778613,0.9666666666666667,0.9949999999999999,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  0 10]]"
+<class 'sklearn.svm._classes.SVC'>,"OrderedDict([('C', 10.0), ('class_weight', None), ('gamma', 'auto'), ('probability', True)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.004884899999979098,0.0003952700000013465,2016.30859375,0.9665831244778613,0.9666666666666667,0.9966666666666666,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  0 10]]"
+<class 'sklearn.svm._classes.SVC'>,"OrderedDict([('C', 0.1), ('class_weight', None), ('gamma', 'scale'), ('probability', True)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.006794799999966017,0.0004365400000021206,1114.89453125,0.9665831244778613,0.9666666666666667,0.9966666666666666,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  1  9]]"
+<class 'sklearn.svm._classes.SVC'>,"OrderedDict([('C', 0.001), ('class_weight', None), ('gamma', 'scale'), ('probability', True)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.007369200000084675,0.000414696666666714,471.3203125,0.9665831244778613,0.9666666666666667,0.5,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  1  9]]"
+<class 'sklearn.svm._classes.SVC'>,"OrderedDict([('C', 0.1), ('class_weight', None), ('gamma', 'auto'), ('probability', True)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.007222800000022289,0.0004582733333336364,470.9140625,0.9665831244778613,0.9666666666666667,0.8033333333333333,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  1  9]]"
+<class 'sklearn.svm._classes.SVC'>,"OrderedDict([('C', 10.0), ('class_weight', 'balanced'), ('gamma', 'auto'), ('probability', True)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.006658099999981459,0.0008851066666655546,471.30859375,0.9665831244778613,0.9666666666666667,0.9966666666666666,"[[10  0  0]
+ [ 0  9  1]
+ [ 0  0 10]]"
+<class 'sklearn.svm._classes.SVC'>,"OrderedDict([('C', 0.001), ('class_weight', 'balanced'), ('gamma', 'scale'), ('probability', True)])","('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,0.007542299999954594,0.0005977400000006128,471.40625,0.9665831244778613,0.9666666666666667,0.001666666666666668,"[[10  0  0]
+ [ 0 10  0]
+ [ 0  1  9]]"
