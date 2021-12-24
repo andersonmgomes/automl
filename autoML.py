@@ -1,5 +1,6 @@
 import math
 import time
+from typing import OrderedDict
 import warnings
 from datetime import datetime
 from multiprocessing import Pool
@@ -195,7 +196,11 @@ def evaluation(individual, automl_obj):
         
     best_score = -1.0
     #dataframe format: ['algorithm', 'params', 'features', 'n_features', 'train_time', 'predict_time', 'mem_max', <metrics>]
-    for params in opt.cv_results_['params']:
+    for params in opt.cv_results_['params']: 
+        if isinstance(params, OrderedDict):
+            #changing the type to dict (when using BayesSearchCV)
+            params = dict(params)
+            
         #seeking for some previous result
         previous_result = automl_obj.results[(automl_obj.results['algorithm'] == algo_instance.__class__) 
                                              & ((automl_obj.results['params'] == params) | is_Voting_or_Stacking(algo_instance))
@@ -204,7 +209,7 @@ def evaluation(individual, automl_obj):
             continue
         #else 
         with warnings.catch_warnings():
-            warnings.simplefilter("ignore")#, category=ConvergenceWarning)
+            warnings.simplefilter("ignore")
             mem_max, row_result = memory_usage(proc=(fit_score)
                                                 , max_usage=True
                                                 , retval=True
@@ -220,8 +225,8 @@ def evaluation(individual, automl_obj):
         log_msg += ' = {:.5f}'.format(row_result[automl_obj.main_metric]) 
         log_msg += ' | ' + str(algo_instance)[:str(algo_instance).find('(')] 
         log_msg += ' | ' + str(len(col_tuple)) + ' features'
-        params_str = str(params)[str(params).find('[')+1:str(params).find(']')]
-        params_str = params_str.replace("('n_jobs', -1), ","").replace("'n_jobs': -1,","").replace("  ", " ")
+        params_str = str(params)
+        params_str = params_str.replace("'n_jobs': -1,","").replace("  ", " ").replace("{ ", "{").replace(" }", "}")
         log_msg += ' | ' + params_str
 
         print(log_msg[:150].replace('\n',''))#show only the 150 first caracteres
@@ -528,8 +533,8 @@ class AutoML:
         result = self.__fit().iloc[result_index]
         title = self.__class2str(result.algorithm)
         title += ' (' + str(result.n_features) +' features)'
-        title += '\n' + str(result.params)[str(result.params).find('[')+1:str(result.params).find(']')]
-        title = title.replace("('n_jobs', -1), ","")
+        title += '\n' + str(result.params)
+        title = title.replace("'n_jobs': -1,","").replace("  ", " ").replace("{ ", "{").replace(" }", "}")
         
         categories = self.y_classes#['Zero', 'One']
         if self.__y_encoder is not None:
