@@ -36,6 +36,7 @@ from sklearn.model_selection import GridSearchCV
 from xgboost import XGBClassifier, XGBRegressor, XGBRFRegressor
 import os
 from sklearn.neural_network import MLPClassifier
+from sklearn.exceptions import ConvergenceWarning
 
 def flushResults(automl_obj):
     #saving results in a csv file
@@ -75,18 +76,17 @@ def features_corr_level_X(i, X_0, X_i, threshold):
     #else: feature ok, no redundance
     return i
 
-def evaluation(individual, automl_obj):
-    def float2bigint(float_value):
-        if math.isnan(float_value):
-            float_value = -1
-        return [int(float_value*100000)]
-    
-    def is_Voting_or_Stacking(a):
-        return ((a == VotingClassifier) or (a == StackingClassifier)
-                or isinstance(a, VotingClassifier) or isinstance(a, StackingClassifier))
+def float2bigint(float_value):
+    if math.isnan(float_value):
+        float_value = -1
+    return [int(float_value*100000)]
 
-    #print(individual)
+def is_Voting_or_Stacking(a):
+    return ((a == VotingClassifier) or (a == StackingClassifier)
+            or isinstance(a, VotingClassifier) or isinstance(a, StackingClassifier))
     
+def evaluation(individual, automl_obj):
+    #print(individual)
     algo_instance = individual[-automl_obj.n_bits_algos:]
     # in this point the variable algo_instance is a bitarray
     algo_instance = bautil.ba2int(bitarray(algo_instance)) % len(automl_obj.selected_algos)
@@ -105,6 +105,12 @@ def evaluation(individual, automl_obj):
     
     if len(col_tuple)==0:
         return float2bigint(-1)
+
+    #seeking for some previous result
+    previous_result = automl_obj.results[(automl_obj.results['algorithm'] == algo_instance.__class__) 
+                                        & (automl_obj.results['features'] == col_tuple)]
+    if previous_result.shape[0]>0:
+        return float2bigint(previous_result.iloc[0][automl_obj.main_metric])
     
     if is_Voting_or_Stacking(algo_instance):
         #getting the top 3 best results group by algorithm
@@ -139,7 +145,7 @@ def evaluation(individual, automl_obj):
     
     #tunning parameters
     with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
+        warnings.simplefilter("ignore", category=ConvergenceWarning)
         if automl_obj.grid_search:
             opt = GridSearchCV(estimator=algo_instance
                                , param_grid=automl_obj.algorithms[algo_instance.__class__]
@@ -165,9 +171,8 @@ def evaluation(individual, automl_obj):
                }
 
         t0 = time.perf_counter()
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")        
-            estimator.fit(X_train2, automl_obj.y_train)
+        
+        estimator.fit(X_train2, automl_obj.y_train)
         row['train_time'] = time.perf_counter() - t0 #train_time
         
         t0 = time.perf_counter()
@@ -193,13 +198,13 @@ def evaluation(individual, automl_obj):
     for params in opt.cv_results_['params']:
         #seeking for some previous result
         previous_result = automl_obj.results[(automl_obj.results['algorithm'] == algo_instance.__class__) 
-                                             & (automl_obj.results['params'] == params)
+                                             & ((automl_obj.results['params'] == params) | is_Voting_or_Stacking(algo_instance))
                                             & (automl_obj.results['features'] == col_tuple)]
         if previous_result.shape[0]>0:
             continue
         #else 
         with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
+            warnings.simplefilter("ignore", category=ConvergenceWarning)
             mem_max, row_result = memory_usage(proc=(fit_score)
                                                 , max_usage=True
                                                 , retval=True
@@ -214,8 +219,10 @@ def evaluation(individual, automl_obj):
         log_msg = '   *Model trained: ' + str(scoring_list[0]) 
         log_msg += ' = {:.5f}'.format(row_result[automl_obj.main_metric]) 
         log_msg += ' | ' + str(algo_instance)[:str(algo_instance).find('(')] 
-        log_msg += ' | ' + str(len(col_tuple)) + ' features' 
-        log_msg += ' | ' + str(params)[str(params).find('[')+1:str(params).find(']')]
+        log_msg += ' | ' + str(len(col_tuple)) + ' features'
+        params_str = str(params)[str(params).find('[')+1:str(params).find(']')]
+        params_str = params_str.replace("('n_jobs', -1), ","") 
+        log_msg += ' | ' + params_str
 
         print(log_msg[:150].replace('\n',''))#show only the 150 first caracteres
  
@@ -697,7 +704,7 @@ if __name__ == '__main__':
     #automl = AutoML(util.getDSWine_RED(), 'quality'
                     , min_x_y_correlation_rate=0.01
                     #, pool=pool
-                    , ngen=1
+                    , ngen=5
                     , ds_name='iris'
                     #, algorithms={KNeighborsClassifier: 
                     #    {"n_neighbors": [3,5,7]
@@ -705,7 +712,7 @@ if __name__ == '__main__':
                     #     , "n_jobs": [-1]}
                     #    , XGBRFRegressor:{}}
                     , features_engineering=False
-                    , n_inter_bayessearch=1)
+                    , n_inter_bayessearch=3)
     print(automl.getResults())
     print(automl.getBestResult())
     print(automl.getBestConfusionMatrix())
