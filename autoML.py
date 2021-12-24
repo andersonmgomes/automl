@@ -92,16 +92,12 @@ def evaluation(individual, automl_obj):
     algo_instance = bautil.ba2int(bitarray(algo_instance)) % len(automl_obj.selected_algos)
     # in this point the variable algo_instance is an integer
     algo_instance =  automl_obj.selected_algos[algo_instance]
-    # in this point the variavles algo_instance is a Class
-    #init_params = automl_obj.algorithms[algo_instance]
-    # in this point the variable init_params is a map with full parameters options
-    #transforming the map into a map of parameters with the default value (first element)
-    #considering only the first value for each parameter
-    #init_params = {key:init_params[key][0] for key in init_params.keys()}
+    # in this point the variable algo_instance is a Class
+
     if is_Voting_or_Stacking(algo_instance):
         algo_instance = algo_instance(estimators=[])
     else:
-        algo_instance = algo_instance()#(**init_params)
+        algo_instance = algo_instance()
     # in this point the variable algo_instance is a object with the default parameters
     
     col_tuple = individual[:len(automl_obj.X_bitmap)-automl_obj.n_bits_algos]
@@ -117,10 +113,14 @@ def evaluation(individual, automl_obj):
         for row in automl_obj.results.iterrows():
             if len(best_estimators)==3:
                 break
+            
+            if is_Voting_or_Stacking(row[1]['algorithm']):
+                continue
+            
             candidate_algo = row[1]['algorithm']()
             candidate_algo.set_params(**row[1]['params'])
-            if ((candidate_algo.__class__ not in [x.__class__ for x in best_estimators])
-                and (not is_Voting_or_Stacking(candidate_algo))):
+            
+            if candidate_algo.__class__ not in [x.__class__ for x in best_estimators]:
                 best_estimators.append(candidate_algo)
         
         if len(best_estimators)<2:
@@ -545,7 +545,7 @@ class AutoML:
         results_df = self.__fit(buffer)
         results_df['algorithm'] = results_df['algorithm'].apply(lambda x: self.__class2str(x))
         results_df['features'] = results_df['features'].apply(lambda x: str(len(x)) + ': ' + str(x).replace('(','').replace(')',''))
-        results_df = results_df.drop(['confusion_matrix', 'train_order', 'n_features'], axis=1)
+        results_df = results_df.drop(['confusion_matrix', 'n_features'], axis=1)
         return results_df
 
     def __class2str(self, cls):
