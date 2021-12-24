@@ -516,7 +516,8 @@ class AutoML:
         result = self.__fit().iloc[result_index]
         title = self.__class2str(result.algorithm)
         title += ' (' + str(result.n_features) +' features)'
-        title += '\n' + str(result.params)
+        title += '\n' + str(result.params)[str(result.params).find('[')+1:str(result.params).find(']')]
+        title = title.replace("('n_jobs', -1), ","")
         categories = self.y_classes#['Zero', 'One']
         if self.__y_encoder is not None:
             categories = self.__y_encoder.categories_[0]
@@ -542,10 +543,9 @@ class AutoML:
         return self.__fit().iloc[0]
     
     def getResults(self, buffer=True):
-        results_df = self.__fit(buffer)
+        results_df = self.__fit(buffer).drop(['confusion_matrix', 'n_features'], axis=1)
         results_df['algorithm'] = results_df['algorithm'].apply(lambda x: self.__class2str(x))
         results_df['features'] = results_df['features'].apply(lambda x: str(len(x)) + ': ' + str(x).replace('(','').replace(')',''))
-        results_df = results_df.drop(['confusion_matrix', 'n_features'], axis=1)
         return results_df
 
     def __class2str(self, cls):
@@ -693,11 +693,11 @@ if __name__ == '__main__':
                     #, pool=pool
                     , ngen=1
                     , ds_name='iris'
-                    #, algorithms={KNeighborsClassifier: 
-                    #    {"n_neighbors": [3,5,7]
-                    #     , "p": [2, 3]
-                    #     , "n_jobs": [-1]}
-                    #    , XGBRFRegressor:{}}
+                    , algorithms={KNeighborsClassifier: 
+                        {"n_neighbors": [3,5,7]
+                         , "p": [2, 3]
+                         , "n_jobs": [-1]}
+                        , XGBRFRegressor:{}}
                     , features_engineering=False
                     , n_inter_bayessearch=1)
     print(automl.getResults())
