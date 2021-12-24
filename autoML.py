@@ -181,6 +181,11 @@ def evaluation(individual, automl_obj):
             #confusion matrix
             row['confusion_matrix'] = confusion_matrix(automl_obj.y_test, estimator.predict(X_test2), labels=automl_obj.y_classes)
         
+        if (is_Voting_or_Stacking(algo_instance)
+            and len(algo_instance.estimators)>0):
+            #incluing the estimators in the row
+            row['params'].update({'estimators': estimator.estimators})
+            
         return row
         
     best_score = -1.0
@@ -518,6 +523,7 @@ class AutoML:
         title += ' (' + str(result.n_features) +' features)'
         title += '\n' + str(result.params)[str(result.params).find('[')+1:str(result.params).find(']')]
         title = title.replace("('n_jobs', -1), ","")
+        
         categories = self.y_classes#['Zero', 'One']
         if self.__y_encoder is not None:
             categories = self.__y_encoder.categories_[0]
@@ -693,11 +699,11 @@ if __name__ == '__main__':
                     #, pool=pool
                     , ngen=1
                     , ds_name='iris'
-                    , algorithms={KNeighborsClassifier: 
-                        {"n_neighbors": [3,5,7]
-                         , "p": [2, 3]
-                         , "n_jobs": [-1]}
-                        , XGBRFRegressor:{}}
+                    #, algorithms={KNeighborsClassifier: 
+                    #    {"n_neighbors": [3,5,7]
+                    #     , "p": [2, 3]
+                    #     , "n_jobs": [-1]}
+                    #    , XGBRFRegressor:{}}
                     , features_engineering=False
                     , n_inter_bayessearch=1)
     print(automl.getResults())
