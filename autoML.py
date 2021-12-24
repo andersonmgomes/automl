@@ -204,7 +204,7 @@ def evaluation(individual, automl_obj):
             continue
         #else 
         with warnings.catch_warnings():
-            warnings.simplefilter("ignore", category=ConvergenceWarning)
+            warnings.simplefilter("ignore")#, category=ConvergenceWarning)
             mem_max, row_result = memory_usage(proc=(fit_score)
                                                 , max_usage=True
                                                 , retval=True
@@ -221,7 +221,7 @@ def evaluation(individual, automl_obj):
         log_msg += ' | ' + str(algo_instance)[:str(algo_instance).find('(')] 
         log_msg += ' | ' + str(len(col_tuple)) + ' features'
         params_str = str(params)[str(params).find('[')+1:str(params).find(']')]
-        params_str = params_str.replace("('n_jobs', -1), ","") 
+        params_str = params_str.replace("('n_jobs', -1), ","").replace("'n_jobs': -1,","").replace("  ", " ")
         log_msg += ' | ' + params_str
 
         print(log_msg[:150].replace('\n',''))#show only the 150 first caracteres
