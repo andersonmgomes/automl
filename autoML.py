@@ -373,7 +373,7 @@ class AutoML:
                  , features_engineering = True
                  , grid_search = False
                  , n_inter_bayessearch = 30
-                 , ds_source_header=None
+                 , ds_source_header='infer'
                  , ds_source_header_names=None
                  ) -> None:
         self.start_time = datetime.now()
@@ -715,18 +715,18 @@ def testAutoML(ds, y_colname):
 
 if __name__ == '__main__':
     #pool = Pool(processes=10)
-    automl = AutoML('datasets/iris.csv', 'class'
-                    , ds_source_header_names=['sepal_length', 'sepal_width', 'petal_length', 'petal_width', 'class']
+    #automl = AutoML('datasets/iris.csv', 'class'
+    #                , ds_source_header_names=['sepal_length', 'sepal_width', 'petal_length', 'petal_width', 'class']
     #automl = AutoML(util.getDSWine_RED(), 'quality'
-                    , min_x_y_correlation_rate=0.01
-                    #, pool=pool
+    automl = AutoML('datasets/viaturas4Model.csv', 'y'
+                    , min_x_y_correlation_rate=0.10
                     , ngen=1
                     , ds_name='iris'
-                    #, algorithms={KNeighborsClassifier: 
-                    #    {"n_neighbors": [3,5,7]
-                    #     , "p": [2, 3]
-                    #     , "n_jobs": [-1]}
-                    #    , XGBRFRegressor:{}}
+                    , algorithms={KNeighborsClassifier: 
+                        {"n_neighbors": [3,5,7]
+                         , "p": [2, 3]
+                         , "n_jobs": [-1]}
+                        , XGBRFRegressor:{}}
                     , features_engineering=True
                     , n_inter_bayessearch=3)
     print(automl.getResults())
