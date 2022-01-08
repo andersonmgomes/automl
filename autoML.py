@@ -13,6 +13,8 @@ from deap import algorithms, base, creator, tools
 from joblib import Parallel, delayed
 from memory_profiler import memory_usage
 import pandas # as pd
+from tqdm import tqdm
+from modin.config import ProgressBar
 import modin.pandas as pd #https://modin.readthedocs.io/
 import ray
 from scipy.special import comb
@@ -375,6 +377,7 @@ class AutoML:
                  , ds_source_header_names=None
                  ) -> None:
         self.start_time = datetime.now()
+        ProgressBar.enable()
         ray.init(ignore_reinit_error=True)
         #initializing variables
         self.results = None
@@ -485,7 +488,6 @@ class AutoML:
         
         #running feature engineering in parallel
         if features_engineering:
-            #ray.init(ignore_reinit_error=True)
             n_cols = self.X_train.shape[1]
             print('Features engineering - Testing correlation with Y...')
             considered_features = Parallel(n_jobs=-1, backend="multiprocessing")(delayed(features_corr_level_Y)
@@ -583,8 +585,6 @@ class AutoML:
                    
         #else to get results
         t0 = time.perf_counter()
-
-        #ray.init(ignore_reinit_error=True)
 
         #dataframe format: ['algorithm', 'params', 'features', 'n_features', 'train_time', 'predict_time', 'mem_max', <metrics>]
         columns_list = ['algorithm', 'params', 'features', 'n_features', 'train_time', 'predict_time', 'mem_max']
