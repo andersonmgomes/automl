@@ -6,14 +6,15 @@ from datetime import datetime
 from multiprocessing import Pool
 import inspect
 import numpy as np
-import pandas as pd
 import scipy.stats as sta
 from bitarray import bitarray
 from bitarray import util as bautil
 from deap import algorithms, base, creator, tools
 from joblib import Parallel, delayed
 from memory_profiler import memory_usage
-#import modin.pandas as pd #https://modin.readthedocs.io/
+import pandas # as pd
+import modin.pandas as pd #https://modin.readthedocs.io/
+import ray
 from scipy.special import comb
 from sklearn import linear_model, neighbors, preprocessing, svm, tree, utils
 from sklearn.base import ClassifierMixin, RegressorMixin
@@ -135,8 +136,8 @@ def evaluation(individual, automl_obj):
         #else
         algo_instance.estimators = list(zip(['e'+str(i) for i in range(1,len(best_estimators)+1)],best_estimators))
         
-    X_train2 = automl_obj.X_train[list(col_tuple)]
-    X_test2 = automl_obj.X_test[list(col_tuple)]
+    X_train2 = automl_obj.X_train[list(col_tuple)]._to_pandas()
+    X_test2 = automl_obj.X_test[list(col_tuple)]._to_pandas()
     
     if len(col_tuple)==1:
         X_train2 = np.asanyarray(X_train2).reshape(-1, 1)
@@ -370,9 +371,11 @@ class AutoML:
                  , features_engineering = True
                  , grid_search = False
                  , n_inter_bayessearch = 30
+                 , ds_source_header=None
+                 , ds_source_header_names=None
                  ) -> None:
         self.start_time = datetime.now()
-        #ray.init(ignore_reinit_error=True)
+        ray.init(ignore_reinit_error=True)
         #initializing variables
         self.results = None
         self.algorithms = algorithms
@@ -390,6 +393,9 @@ class AutoML:
         self.pool = pool
         self.grid_search = grid_search
         self.n_inter_bayessearch = n_inter_bayessearch
+        
+        if type(ds_source) == str and ds_source.endswith('.csv'):
+            ds_source = pd.read_csv(ds_source, header=ds_source_header, names=ds_source_header_names)
         
         print('Original dataset dimensions:', ds_source.shape)
         #NaN values
@@ -477,13 +483,14 @@ class AutoML:
         self.y_train = np.asanyarray(self.y_train).reshape(-1, 1).ravel()
         self.y_test = np.asanyarray(self.y_test).reshape(-1, 1).ravel()
         
-        #running feature engineering in paralel
+        #running feature engineering in parallel
         if features_engineering:
+            #ray.init(ignore_reinit_error=True)
             n_cols = self.X_train.shape[1]
             print('Features engineering - Testing correlation with Y...')
             considered_features = Parallel(n_jobs=-1, backend="multiprocessing")(delayed(features_corr_level_Y)
                                     (i
-                                    , self.X_train.iloc[:,i]
+                                    , self.X_train.iloc[:,i]._to_pandas()
                                     , self.y_train
                                     , self.__min_x_y_correlation_rate)
                                     for i in range(0, n_cols))
@@ -502,8 +509,8 @@ class AutoML:
             n_cols = self.X_train.shape[1]
             considered_features = Parallel(n_jobs=-1, backend="multiprocessing")(delayed(features_corr_level_X)
                                     (i
-                                    ,self.X_train.iloc[:,i]
-                                    , self.X_train.iloc[:,i+1:]
+                                    , self.X_train.iloc[:,i]._to_pandas()
+                                    , self.X_train.iloc[:,i+1:]._to_pandas()
                                     , (1-self.__min_x_y_correlation_rate))
                                     for i in range(0, n_cols-1))
 
@@ -576,6 +583,9 @@ class AutoML:
                    
         #else to get results
         t0 = time.perf_counter()
+
+        #ray.init(ignore_reinit_error=True)
+
         #dataframe format: ['algorithm', 'params', 'features', 'n_features', 'train_time', 'predict_time', 'mem_max', <metrics>]
         columns_list = ['algorithm', 'params', 'features', 'n_features', 'train_time', 'predict_time', 'mem_max']
         
@@ -583,7 +593,7 @@ class AutoML:
         if self.YisCategorical():
             columns_list.append('confusion_matrix')
         
-        self.results = pd.DataFrame(columns=columns_list)
+        self.results = pandas.DataFrame(columns=columns_list)
         del(columns_list)
         
         y_is_cat = self.YisCategorical()
@@ -705,18 +715,19 @@ def testAutoML(ds, y_colname):
 
 if __name__ == '__main__':
     #pool = Pool(processes=10)
-    automl = AutoML(util.getDSIris(), 'class'
+    automl = AutoML('datasets/iris.csv', 'class'
+                    , ds_source_header_names=['sepal_length', 'sepal_width', 'petal_length', 'petal_width', 'class']
     #automl = AutoML(util.getDSWine_RED(), 'quality'
                     , min_x_y_correlation_rate=0.01
                     #, pool=pool
-                    , ngen=5
+                    , ngen=1
                     , ds_name='iris'
                     #, algorithms={KNeighborsClassifier: 
                     #    {"n_neighbors": [3,5,7]
                     #     , "p": [2, 3]
                     #     , "n_jobs": [-1]}
                     #    , XGBRFRegressor:{}}
-                    , features_engineering=False
+                    , features_engineering=True
                     , n_inter_bayessearch=3)
     print(automl.getResults())
     print(automl.getBestResult())
