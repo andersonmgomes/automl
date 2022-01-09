@@ -795,8 +795,9 @@ if __name__ == '__main__':
     #ds_test_multiple_y.to_csv('datasets/multilple_y.csv', index=False)
     #print(ds_test_multiple_y)
     #exit()    
-    automl = AutoML('results/20220109_155652_VIATURAS_FASTTEST_AFTER_FEATENG_100.csv', ['y', 'y2']
-                    , flush_intermediate_steps = False
+    #automl = AutoML('results/20220109_155652_VIATURAS_FASTTEST_AFTER_FEATENG_100.csv', ['y', 'y2']
+    automl = AutoML('datasets/multilple_y.csv', ['y', 'y2']
+                    , flush_intermediate_steps = True
                     , flush_transformed_ds_sample_frac=1
                     , ds_sample_frac = 1
                     , min_x_y_correlation_rate=0.1
@@ -807,7 +808,7 @@ if __name__ == '__main__':
                          , "p": [2, 3]
                          , "n_jobs": [-1]}
                         , XGBRFRegressor:{}}
-                    , features_engineering=False
+                    , features_engineering=True
                     , n_inter_bayessearch=3)
     print(automl.getResults())
     print(automl.getBestResult())
