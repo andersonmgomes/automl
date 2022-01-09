@@ -52,7 +52,7 @@ def _flush_intermediate_steps(df, label_list = [''], dth=datetime.now(), index=F
     for label in label_list:
         label = str(label)
         if label != '' and label is not None:
-            filename += '_' + label.strip().upper()
+            filename += '_' + label.strip().upper().replace(' ', '_')
     
     filename += '.csv'
     
@@ -62,9 +62,9 @@ def _flush_intermediate_steps(df, label_list = [''], dth=datetime.now(), index=F
 
     df.to_csv(os.path.join(filedir, filename), index=index, header=header)
 
-def flushResults(automl_obj):
+def flushResults(automl_obj, y):
     #saving results in a csv file
-    _flush_intermediate_steps(automl_obj.results, ['RESULTS', automl_obj.ds_name], automl_obj.start_time)
+    _flush_intermediate_steps(automl_obj.results[y], ['RESULTS', automl_obj.ds_name, y], automl_obj.start_time)
 
 def features_corr_level_Y(i, X, y, threshold):
     #features engineering
@@ -102,13 +102,13 @@ def is_Voting_or_Stacking(a):
     return ((a == VotingClassifier) or (a == StackingClassifier)
             or isinstance(a, VotingClassifier) or isinstance(a, StackingClassifier))
     
-def evaluation(individual, automl_obj):
+def evaluation(individual, automl_obj, y):
     #print(individual)
-    algo_instance = individual[-automl_obj.n_bits_algos:]
+    algo_instance = individual[-automl_obj.n_bits_algos_map[y]:]
     # in this point the variable algo_instance is a bitarray
-    algo_instance = bautil.ba2int(bitarray(algo_instance)) % len(automl_obj.selected_algos)
+    algo_instance = bautil.ba2int(bitarray(algo_instance)) % len(automl_obj.selected_algos_map[y])
     # in this point the variable algo_instance is an integer
-    algo_instance =  automl_obj.selected_algos[algo_instance]
+    algo_instance =  automl_obj.selected_algos_map[y][algo_instance]
     # in this point the variable algo_instance is a Class
 
     if is_Voting_or_Stacking(algo_instance):
@@ -117,23 +117,23 @@ def evaluation(individual, automl_obj):
         algo_instance = algo_instance()
     # in this point the variable algo_instance is a object with the default parameters
     
-    col_tuple = individual[:len(automl_obj.X_bitmap)-automl_obj.n_bits_algos]
-    col_tuple = tuple([automl_obj.X_train.columns[i] for i, c in enumerate(col_tuple) if c == 1])
+    col_tuple = individual[:len(automl_obj.X_bitmap_map[y])-automl_obj.n_bits_algos_map[y]]
+    col_tuple = tuple([automl_obj.X_train_map[y].columns[i] for i, c in enumerate(col_tuple) if c == 1])
     
     if len(col_tuple)==0:
         return float2bigint(-1)
 
     #seeking for some previous result
-    previous_result = automl_obj.results[(automl_obj.results['algorithm'] == algo_instance.__class__) 
-                                        & (automl_obj.results['features'] == col_tuple)]
+    previous_result = automl_obj.results[y][(automl_obj.results[y]['algorithm'] == algo_instance.__class__) 
+                                        & (automl_obj.results[y]['features'] == col_tuple)]
     if previous_result.shape[0]>0:
-        return float2bigint(previous_result.iloc[0][automl_obj.main_metric])
+        return float2bigint(previous_result.iloc[0][automl_obj.main_metric_map[y]])
     
     if is_Voting_or_Stacking(algo_instance):
         #getting the top 3 best results group by algorithm
         best_estimators = []
-        automl_obj.results.sort_values(by=automl_obj.main_metric, ascending=False, inplace=True)
-        for row in automl_obj.results.iterrows():
+        automl_obj.results[y].sort_values(by=automl_obj.main_metric_map[y], ascending=False, inplace=True)
+        for row in automl_obj.results[y].iterrows():
             if len(best_estimators)==3:
                 break
             
@@ -151,14 +151,14 @@ def evaluation(individual, automl_obj):
         #else
         algo_instance.estimators = list(zip(['e'+str(i) for i in range(1,len(best_estimators)+1)],best_estimators))
         
-    X_train2 = automl_obj.X_train[list(col_tuple)]._to_pandas()
-    X_test2 = automl_obj.X_test[list(col_tuple)]._to_pandas()
+    X_train2 = automl_obj.X_train_map[y][list(col_tuple)]._to_pandas()
+    X_test2 = automl_obj.X_test_map[y][list(col_tuple)]._to_pandas()
     
     if len(col_tuple)==1:
         X_train2 = np.asanyarray(X_train2).reshape(-1, 1)
         X_test2 = np.asanyarray(X_test2).reshape(-1, 1)
 
-    scoring_list = automl_obj.getMetrics()
+    scoring_list = automl_obj.getMetrics(y)
     
     #tunning parameters
     with warnings.catch_warnings():
@@ -166,18 +166,18 @@ def evaluation(individual, automl_obj):
         if automl_obj.grid_search:
             opt = GridSearchCV(estimator=algo_instance
                                , param_grid=automl_obj.algorithms[algo_instance.__class__]
-                               , scoring=automl_obj.main_metric
+                               , scoring=automl_obj.main_metric_map[y]
                                , cv=5
                                , verbose=0, n_jobs=-1
                                )
         else:
             opt = BayesSearchCV(estimator=algo_instance
                                 , search_spaces=automl_obj.algorithms[algo_instance.__class__]
-                                , scoring=automl_obj.main_metric
+                                , scoring=automl_obj.main_metric_map[y]
                                 , n_iter=automl_obj.n_inter_bayessearch, cv=5
                                 , verbose=0, n_jobs=-1, random_state=automl_obj.RANDOM_STATE
                                 )
-        opt.fit(X_train2, automl_obj.y_train)
+        opt.fit(X_train2, automl_obj.y_train_map[y])
 
     def fit_score():
         estimator = algo_instance.set_params(**params)
@@ -189,19 +189,19 @@ def evaluation(individual, automl_obj):
 
         t0 = time.perf_counter()
         
-        estimator.fit(X_train2, automl_obj.y_train)
+        estimator.fit(X_train2, automl_obj.y_train_map[y])
         row['train_time'] = time.perf_counter() - t0 #train_time
         
         t0 = time.perf_counter()
         
         for scor_str in scoring_list:
-            row[scor_str] = (get_scorer(scor_str)(estimator, X_test2, automl_obj.y_test))
+            row[scor_str] = (get_scorer(scor_str)(estimator, X_test2, automl_obj.y_test_map[y]))
         
-        row['predict_time'] = (time.perf_counter() - t0)/len(automl_obj.y_test) #predict_time, considering one sample at a time
+        row['predict_time'] = (time.perf_counter() - t0)/len(automl_obj.y_test_map[y]) #predict_time, considering one sample at a time
         
-        if automl_obj.YisCategorical():
+        if automl_obj.YisCategorical(y):
             #confusion matrix
-            row['confusion_matrix'] = confusion_matrix(automl_obj.y_test, estimator.predict(X_test2), labels=automl_obj.y_classes)
+            row['confusion_matrix'] = confusion_matrix(automl_obj.y_test_map[y], estimator.predict(X_test2), labels=automl_obj.y_classes_map[y])
         
         if (is_Voting_or_Stacking(algo_instance)
             and len(algo_instance.estimators)>0):
@@ -218,9 +218,9 @@ def evaluation(individual, automl_obj):
             params = dict(params)
             
         #seeking for some previous result
-        previous_result = automl_obj.results[(automl_obj.results['algorithm'] == algo_instance.__class__) 
-                                             & ((automl_obj.results['params'] == params) | is_Voting_or_Stacking(algo_instance))
-                                            & (automl_obj.results['features'] == col_tuple)]
+        previous_result = automl_obj.results[y][(automl_obj.results[y]['algorithm'] == algo_instance.__class__) 
+                                             & ((automl_obj.results[y]['params'] == params) | is_Voting_or_Stacking(algo_instance))
+                                            & (automl_obj.results[y]['features'] == col_tuple)]
         if previous_result.shape[0]>0:
             continue
         #else 
@@ -232,13 +232,13 @@ def evaluation(individual, automl_obj):
                                                 , include_children=True)
         row_result['mem_max'] = mem_max
 
-        automl_obj.results.loc[len(automl_obj.results)] = row_result
+        automl_obj.results[y].loc[len(automl_obj.results[y])] = row_result
 
-        if row_result[automl_obj.main_metric] > best_score:
-            best_score = row_result[automl_obj.main_metric]
+        if row_result[automl_obj.main_metric_map[y]] > best_score:
+            best_score = row_result[automl_obj.main_metric_map[y]]
             
         log_msg = '   *Model trained: ' + str(scoring_list[0]) 
-        log_msg += ' = {:.5f}'.format(row_result[automl_obj.main_metric]) 
+        log_msg += ' = {:.5f}'.format(row_result[automl_obj.main_metric_map[y]]) 
         log_msg += ' | ' + str(algo_instance)[:str(algo_instance).find('(')] 
         log_msg += ' | ' + str(len(col_tuple)) + ' features'
         params_str = str(params)
@@ -247,21 +247,21 @@ def evaluation(individual, automl_obj):
 
         print(log_msg[:150].replace('\n',''))#show only the 150 first caracteres
  
-    flushResults(automl_obj)
+    flushResults(automl_obj, y)
     return float2bigint(best_score) #main metric
 
 def gen_first_people(n_features, n_algos, n_bits_algos):
     first_people = []
-    X_bitmap = bautil.int2ba(1, n_features)
-    X_bitmap.setall(1)
+    X_bitmap_map = bautil.int2ba(1, n_features)
+    X_bitmap_map.setall(1)
     for i in range(n_algos):
         c_bitmap = []
-        c_bitmap.extend(list(X_bitmap))
+        c_bitmap.extend(list(X_bitmap_map))
         c_bitmap.extend(list(bautil.int2ba(i, n_bits_algos)))
         first_people.append(c_bitmap)
     return first_people
 
-def ga_toolbox(automl_obj):
+def ga_toolbox(automl_obj, y):
     #genetics algorithm: creating types
     with warnings.catch_warnings(): #TODO: solve RuntimeWarning: A class named 'FitnessMax' has already been created...
         warnings.simplefilter("ignore")
@@ -275,16 +275,17 @@ def ga_toolbox(automl_obj):
 
     #genetics algorithm: initialization
     def initPopulation(pcls, ind_init):
-        return pcls(ind_init(c) for c in gen_first_people(automl_obj.X_train.shape[1], len(automl_obj.selected_algos), automl_obj.n_bits_algos))
+        return pcls(ind_init(c) for c in gen_first_people(automl_obj.X_train_map[y].shape[1]
+                                                          , len(automl_obj.selected_algos_map[y])
+                                                          , automl_obj.n_bits_algos_map[y]))
     toolbox.register("population", initPopulation, list, creator.Individual)
     
     #genetics algorithm: operators
-    toolbox.register("evaluate", evaluation, automl_obj=automl_obj)
+    toolbox.register("evaluate", evaluation, automl_obj=automl_obj, y=y)
     toolbox.register("mate", tools.cxTwoPoint)
     toolbox.register("mutate", tools.mutFlipBit, indpb=0.1)
     toolbox.register("select", tools.selTournament, tournsize=3)
     return toolbox
-
 class AutoML:
     ALGORITHMS = {
         #classifiers
@@ -396,7 +397,7 @@ class AutoML:
         ProgressBar.enable()
         ray.init(ignore_reinit_error=True)
         #initializing variables
-        self.results = None
+        self.results = {}
         self.algorithms = algorithms
         self.__unique_categoric_limit = unique_categoric_limit
         self.__min_x_y_correlation_rate = min_x_y_correlation_rate #TODO: #1 MIN_X_Y_CORRELATION_RATE: define this value dynamically
@@ -406,6 +407,12 @@ class AutoML:
         self.pool = pool
         self.grid_search = grid_search
         self.n_inter_bayessearch = n_inter_bayessearch
+        
+        #initializing control maps
+        self.selected_algos_map = {}
+        self.n_bits_algos_map = {}
+        self.X_bitmap_map = {}
+        self.main_metric_map = {}
         
         if type(ds_source) == str and ds_source.endswith('.csv'):
             ds_source = pd.read_csv(ds_source, header=ds_source_header, names=ds_source_header_names)
@@ -420,12 +427,12 @@ class AutoML:
         if flush_intermediate_steps:
             _flush_intermediate_steps(ds, [self.ds_name, 'sample_frac', str(int(ds_sample_frac*100))])
 
-        self.y_colname = y_colname
-        if type(self.y_colname) == str:
-            self.y_colname = [self.y_colname]
+        self.y_colname_list = y_colname
+        if type(self.y_colname_list) == str:
+            self.y_colname_list = [self.y_colname_list]
 
         #setting X
-        self.X = ds.drop(self.y_colname, axis=1)
+        self.X = ds.drop(self.y_colname_list, axis=1)
         self.__onehot_encoder = OneHotEncoder(sparse=False, dtype=int)
         hot_columns = []
         str_columns = []
@@ -461,24 +468,23 @@ class AutoML:
         self.X = pd.DataFrame(self.scaler.fit_transform(self.X), columns=self.X.columns) 
 
         #setting Y
-        self.y_full = ds[self.y_colname]
-        self.__y_encoder = [None]*len(self.y_colname)
-        #self.y = np.asanyarray(self.y_full).reshape(-1, 1).ravel()
-        self.y_is_binary = [False]*len(self.y_colname)
-        self.y_classes = [None]*len(self.y_colname)
-        self.X_train = [None]*len(self.y_colname)
-        self.X_test = [None]*len(self.y_colname)
-        self.y_train = [None]*len(self.y_colname)
-        self.y_test = [None]*len(self.y_colname)
-        
-        self.metrics_regression_list = metrics
-        self.metrics_classification_list = metrics
+        self.y_full = ds[self.y_colname_list]
+        self.__y_encoder_map = {}
+        self.y_is_binary_map = {}
+        self.y_classes_map = {}
+        self.X_train_map = {}
+        self.X_test_map = {}
+        self.y_train_map = {}
+        self.y_test_map = {}
+
+        self.metrics_regression_map = metrics
+        self.metrics_classification_map = metrics
         if metrics is None:
-            self.metrics_regression_list = [None]*len(self.y_colname)
-            self.metrics_classification_list = [None]*len(self.y_colname)
-            for i in range(len(self.y_colname)):
-                self.metrics_regression_list[i] = ['r2', 'neg_mean_absolute_error', 'neg_mean_squared_error']
-                self.metrics_classification_list[i] = ['f1', 'accuracy', 'roc_auc']
+            self.metrics_regression_map = {}
+            self.metrics_classification_map = {}
+            for y in self.y_colname_list:
+                self.metrics_regression_map[y] = ['r2', 'neg_mean_absolute_error', 'neg_mean_squared_error']
+                self.metrics_classification_map[y] = ['f1', 'accuracy', 'roc_auc']
         #metrics reference: https://scikit-learn.org/stable/modules/model_evaluation.html
 
         def __train_test_split(y_col_name):
@@ -490,55 +496,55 @@ class AutoML:
                 
             return train_test_split(self.X, y, train_size=0.8, test_size=0.2, random_state=self.RANDOM_STATE, stratify=stratify)
 
-        for i, y in enumerate(self.y_colname):
+        for y in self.y_colname_list:
             if self.YisCategorical(y):
                 print('[' + y + '] ML problem type: Classification')
                 #encoding
-                self.__y_encoder[i] = OrdinalEncoder(dtype=int)
-                self.y_full[y] = pd.DataFrame(self.__y_encoder[i].fit_transform(np.asanyarray(self.y_full[y]).reshape(-1, 1)), columns=[self.y_colname[i]])
+                self.__y_encoder_map[y] = OrdinalEncoder(dtype=int)
+                self.y_full[y] = pd.DataFrame(self.__y_encoder_map[y].fit_transform(np.asanyarray(self.y_full[y]).reshape(-1, 1)), columns=[y])
 
-                self.y_classes[i] = np.sort(self.y_full[y].unique())
-                self.y_is_binary[i] = len(self.y_classes[i]) == 2
+                self.y_classes_map[y] = np.sort(self.y_full[y].unique())
+                self.y_is_binary_map[y] = len(self.y_classes_map[y]) == 2
 
-                if not self.y_is_binary[i]: #multiclass 
+                if not self.y_is_binary_map[y]: #multiclass 
                     #adjusting the metrics for multiclass target
-                    for j, m in enumerate(self.metrics_classification_list[i]):
+                    for j, m in enumerate(self.metrics_classification_map[y]):
                         if m == 'f1':
-                            self.metrics_classification_list[i][j] = 'f1_weighted'
+                            self.metrics_classification_map[y][j] = 'f1_weighted'
                         elif m == 'roc_auc':
-                            self.metrics_classification_list[i][j] = 'roc_auc_ovr_weighted'
+                            self.metrics_classification_map[y][j] = 'roc_auc_ovr_weighted'
                         elif m == 'accuracy':
-                            self.metrics_classification_list[i][j] = 'balanced_accuracy'
+                            self.metrics_classification_map[y][j] = 'balanced_accuracy'
                         elif m == 'recall':
-                            self.metrics_classification_list[i][j] = 'recall_weighted'
+                            self.metrics_classification_map[y][j] = 'recall_weighted'
                         elif m == 'precision':
-                            self.metrics_classification_list[i][j] = 'precision_weighted'
+                            self.metrics_classification_map[y][j] = 'precision_weighted'
 
             else:
                 print('[' + y + '] ML problem type: Regression')
 
-            print('[' + y + ']    Applied metrics:', self.metrics_classification_list[i])
+            print('[' + y + ']    Applied metrics:', self.metrics_classification_map[y])
             #splitting dataset
             print('[' + y + ']    Splitting dataset...')
-            self.X_train[i], self.X_test[i], self.y_train[i], self.y_test[i] = __train_test_split(y)
-            print('   X_train dimensions:', self.X_train[i].shape)
-            print('   y_train dimensions:', self.y_train[i].shape)
-            self.y_train[i] = np.asanyarray(self.y_train[i]).reshape(-1, 1).ravel()
-            self.y_test[i] = np.asanyarray(self.y_test[i]).reshape(-1, 1).ravel()
+            self.X_train_map[y], self.X_test_map[y], self.y_train_map[y], self.y_test_map[y] = __train_test_split(y)
+            print('   X_train dimensions:', self.X_train_map[y].shape)
+            print('   y_train dimensions:', self.y_train_map[y].shape)
+            self.y_train_map[y] = np.asanyarray(self.y_train_map[y]).reshape(-1, 1).ravel()
+            self.y_test_map[y] = np.asanyarray(self.y_test_map[y]).reshape(-1, 1).ravel()
 
             #running feature engineering in parallel
             if features_engineering:
-                n_cols = self.X_train[i].shape[1]
+                n_cols = self.X_train_map[y].shape[1]
                 print('[' + y + '] Features engineering - Testing correlation with Y...')
                 considered_features = Parallel(n_jobs=-1, backend="multiprocessing")(delayed(features_corr_level_Y)
                                         (j
-                                        , self.X_train[i].iloc[:,j]._to_pandas()
-                                        , self.y_train[i]
+                                        , self.X_train_map[y].iloc[:,j]._to_pandas()
+                                        , self.y_train_map[y]
                                         , self.__min_x_y_correlation_rate)
                                         for j in range(0, n_cols))
                 considered_features = [x for x in considered_features if x is not None]
-                self.X_train[i] = self.X_train[i].iloc[:,considered_features]
-                self.X_test[i] = self.X_test[i].iloc[:,considered_features]
+                self.X_train_map[y] = self.X_train_map[y].iloc[:,considered_features]
+                self.X_test_map[y] = self.X_test_map[y].iloc[:,considered_features]
                 
                 def n_features_2str():
                     return "{:.2f}".format(100*(1-len(considered_features)/self.X.shape[1])) + "% (" + str(len(considered_features)) + " remained)"
@@ -548,17 +554,17 @@ class AutoML:
                 
                 print('[' + y + '] Features engineering - Testing redudance between features...')    
                 
-                n_cols = self.X_train[i].shape[1]
+                n_cols = self.X_train_map[y].shape[1]
                 considered_features = Parallel(n_jobs=-1, backend="multiprocessing")(delayed(features_corr_level_X)
                                         (j
-                                        , self.X_train[i].iloc[:,j]._to_pandas()
-                                        , self.X_train[i].iloc[:,j+1:]._to_pandas()
+                                        , self.X_train_map[y].iloc[:,j]._to_pandas()
+                                        , self.X_train_map[y].iloc[:,j+1:]._to_pandas()
                                         , (1-self.__min_x_y_correlation_rate))
                                         for j in range(0, n_cols-1))
 
                 considered_features = [x for x in considered_features if x is not None]
-                self.X_train[i] = self.X_train[i].iloc[:,considered_features]
-                self.X_test[i] = self.X_test[i].iloc[:,considered_features]
+                self.X_train_map[y] = self.X_train_map[y].iloc[:,considered_features]
+                self.X_test_map[y] = self.X_test_map[y].iloc[:,considered_features]
                 
                 print('[' + y + ']   Features engineering - Features reduction after redudance test:'
                     , n_features_2str())
@@ -566,24 +572,24 @@ class AutoML:
         if flush_intermediate_steps and flush_transformed_ds_sample_frac > 0 and flush_transformed_ds_sample_frac <= 1:
             #getting the set of columns to be flushed
             col_names = set()
-            for i in range(len(self.y_colname)):
-                col_names = col_names.union(set(self.X_train[i].columns))
+            for y in self.y_colname_list:
+                col_names = col_names.union(set(self.X_train_map[y].columns))
             
             col_names = list(col_names)
             #saving results in a csv file
             n_rows = int(flush_transformed_ds_sample_frac*self.X.shape[0])
             
             trans_df = pd.concat([self.X[col_names].iloc[:n_rows].reset_index(drop=True)
-                                  , pd.DataFrame(self.y_full[:n_rows], columns=self.y_colname)]
+                                  , pd.DataFrame(self.y_full[:n_rows], columns=self.y_colname_list)]
                                  , axis=1, ignore_index=True)
             
-            col_names.extend(self.y_colname)
+            col_names.extend(self.y_colname_list)
             trans_df.columns = col_names
 
             _flush_intermediate_steps(trans_df, label_list=[self.ds_name, 'AFTER_FEATENG', int(flush_transformed_ds_sample_frac*100)])            
 
     def clearResults(self):
-        self.results = None #cleaning the previous results
+        self.results = {} #cleaning the previous results
         
     def getBestModel(self):
         if self.getBestResult() is None:
@@ -595,6 +601,8 @@ class AutoML:
         return self.getConfusionMatrix(0)
     
     def getConfusionMatrix(self, result_index):
+        pass
+        '''
         if self.YisContinuous():
             return None
         #else: classification problem
@@ -604,16 +612,16 @@ class AutoML:
         title += '\n' + str(result.params)
         title = title.replace("'n_jobs': -1,","").replace("  ", " ").replace("{ ", "{").replace(" }", "}")
         
-        categories = self.y_classes#['Zero', 'One']
-        if self.__y_encoder is not None:
-            categories = self.__y_encoder.categories_[0]
+        categories = self.y_classes_map#['Zero', 'One']
+        if self.__y_encoder_map is not None:
+            categories = self.__y_encoder_map.categories_[0]
             
         group_names = [] #['True Neg','False Pos','False Neg','True Pos']
         for c in categories:
             group_names.append('True_' + str(c)) 
             group_names.append('False_' + str(c))
             
-        custom_metrics = dict(result.loc[self.getMetrics()])
+        custom_metrics = dict(result.loc[self.getMetrics(y)])
         
         return make_confusion_matrix(result.confusion_matrix
                                      , group_names=group_names
@@ -621,26 +629,35 @@ class AutoML:
                                      , cmap='Blues'
                                      , title=title
                                      , custom_metrics=custom_metrics);    
+        '''
                 
     def getBestResult(self):
+        pass
+        '''
         if len(self.__fit()) == 0:
             return None
         #else
         return self.__fit().iloc[0]
-    
+        '''
     def getResults(self, buffer=True):
-        results_df = self.__fit(buffer).drop(['confusion_matrix', 'n_features'], axis=1)
-        results_df['algorithm'] = results_df['algorithm'].apply(lambda x: self.__class2str(x))
-        results_df['features'] = results_df['features'].apply(lambda x: str(len(x)) + ': ' + str(x).replace('(','').replace(')',''))
-        return results_df
+        return self.__fit(buffer)
+        #results_df = self.__fit(buffer).drop(['confusion_matrix', 'n_features'], axis=1)
+        #results_df['algorithm'] = results_df['algorithm'].apply(lambda x: self.__class2str(x))
+        #results_df['features'] = results_df['features'].apply(lambda x: str(len(x)) + ': ' + str(x).replace('(','').replace(')',''))
+        #return results_df
 
     def __class2str(self, cls):
         cls_str = str(cls)
         return cls_str[cls_str.rfind('.')+1:cls_str.rfind("'")] 
-            
+
     def __fit(self, buffer=True):
-        if buffer and self.results is not None:
-            return self.results
+        for y in self.y_colname_list:
+            self.__fit_one_y(y, buffer)
+        return self.results
+            
+    def __fit_one_y(self, y, buffer=True):
+        if buffer and y in self.results:
+            return self.results[y]
                    
         #else to get results
         t0 = time.perf_counter()
@@ -648,17 +665,18 @@ class AutoML:
         #dataframe format: ['algorithm', 'params', 'features', 'n_features', 'train_time', 'predict_time', 'mem_max', <metrics>]
         columns_list = ['algorithm', 'params', 'features', 'n_features', 'train_time', 'predict_time', 'mem_max']
         
-        columns_list.extend(self.getMetrics())
-        if self.YisCategorical():
+        columns_list.extend(self.getMetrics(y))
+        
+        y_is_cat = self.YisCategorical(y)
+        y_is_num = not y_is_cat
+        
+        if y_is_cat:
             columns_list.append('confusion_matrix')
         
-        self.results = pandas.DataFrame(columns=columns_list)
+        self.results[y] = pandas.DataFrame(columns=columns_list)
         del(columns_list)
         
-        y_is_cat = self.YisCategorical()
-        y_is_num = not y_is_cat
-
-        self.selected_algos = []
+        self.selected_algos_map[y] = []
         
         def is_in_class_tree(cls1, cls2):
             #vide https://docs.python.org/3/library/inspect.html
@@ -670,58 +688,54 @@ class AutoML:
             ):
                 continue
             #else: all right
-            self.selected_algos.append(algo)
+            self.selected_algos_map[y].append(algo)
         
-        print('Selected algorithms:', [self.__class2str(x) for x in self.selected_algos])
+        print('Selected algorithms:', [self.__class2str(x) for x in self.selected_algos_map[y]])
         
         #setup the bitmap to genetic algorithm
-        self.n_bits_algos = len(bautil.int2ba(len(self.selected_algos)-1))#TODO: analyze de number of bits to use
-        self.n_cols = self.X_train.shape[1] + self.n_bits_algos
-        self.X_bitmap = bitarray(self.n_cols)
-        self.X_bitmap.setall(1)
+        self.n_bits_algos_map[y] = len(bautil.int2ba(len(self.selected_algos_map[y])-1))#TODO: analyze de number of bits to use
+        n_cols = self.X_train_map[y].shape[1] + self.n_bits_algos_map[y]
+        self.X_bitmap_map[y] = bitarray(n_cols)
+        self.X_bitmap_map[y].setall(1)
 
         #main metric column
-        self.main_metric = self.metrics_regression_list[0] #considering the first element the most important
-        if y_is_cat:
-            self.main_metric = self.metrics_classification_list[0] #considering the first element the most important
+        self.main_metric_map[y] = self.getMetrics(y)[0] #considering the first element the most important
 
         #calculating the size of population (features x algorithms)
         n_train_sets = 0
-        for k in range(1, self.X_train.shape[1] + 1):
-            n_train_sets += comb(self.X_train.shape[1] + 1, k, exact=False)
+        for k in range(1, self.X_train_map[y].shape[1] + 1):
+            n_train_sets += comb(self.X_train_map[y].shape[1] + 1, k, exact=False)
             if math.isinf(n_train_sets):
                 break
 
-        print('Nº of training possible basic combinations:'
-              , n_train_sets*len(self.selected_algos)
+        print('[' + y + '] Nº of training possible basic combinations:'
+              , n_train_sets*len(self.selected_algos_map[y])
               , '(' + str(n_train_sets),'features combinations,'
-              , str(len(self.selected_algos)) +' algorithms)')
+              , str(len(self.selected_algos_map[y])) +' algorithms)')
 
-        if math.isinf(n_train_sets):
-            n_train_sets = self.X_train.shape[1]
-
-        n_train_sets = int(n_train_sets)        
+        #if math.isinf(n_train_sets):
+        #    n_train_sets = self.X_train_map[y].shape[1]
+        #n_train_sets = int(n_train_sets)        
         
-        toolbox = ga_toolbox(self)
+        toolbox = ga_toolbox(self, y)
         #running the GA algorithm
         algorithms.eaSimple(toolbox.population(), toolbox, cxpb=0.8, mutpb=0.3, ngen=self.ngen, verbose=False)
         #free GA memory
         del(toolbox)
         
         #preparing the results
-        self.results.sort_values(by=[self.main_metric, 'predict_time'], ascending=[False,True], inplace=True)
-        self.results = self.results.rename_axis('train_order').reset_index()        
+        self.results[y].sort_values(by=[self.main_metric_map[y], 'predict_time'], ascending=[False,True], inplace=True)
+        self.results[y] = self.results[y].rename_axis('train_order').reset_index()        
 
         print('Fit Time (GA):', int(time.perf_counter() - t0), 's')
         
-        ray.shutdown()
-        return self.results
+        return self.results[y]
     
-    def getMetrics(self):
-        if self.YisCategorical():
-            return self.metrics_classification_list
+    def getMetrics(self, y):
+        if self.YisCategorical(y):
+            return self.metrics_classification_map[y]
         #else:
-        return self.metrics_regression_list
+        return self.metrics_regression_map[y]
     
     def Ytype(self):
         return type(self.y_full.iloc[0,0])
@@ -739,8 +753,12 @@ class AutoML:
         #else
         return True    
     
-    def YisContinuous(self) -> bool:
-        return not self.YisCategorical()
+    def YisContinuous(self, y) -> bool:
+        return not self.YisCategorical(y)
+    
+    def __del__(self):
+        ray.shutdown()
+    
                    
 
 #utilitary methods
