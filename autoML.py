@@ -399,12 +399,6 @@ class AutoML:
         self.results = None
         self.algorithms = algorithms
         self.__unique_categoric_limit = unique_categoric_limit
-        self.metrics_regression_list = metrics
-        self.metrics_classification_list = metrics
-        if metrics is None:
-            self.metrics_regression_list = ['r2', 'neg_mean_absolute_error', 'neg_mean_squared_error']
-            self.metrics_classification_list = ['f1', 'accuracy', 'roc_auc']
-        #metrics reference: https://scikit-learn.org/stable/modules/model_evaluation.html
         self.__min_x_y_correlation_rate = min_x_y_correlation_rate #TODO: #1 MIN_X_Y_CORRELATION_RATE: define this value dynamically
         self.RANDOM_STATE = 1102
         self.ds_name = ds_name
@@ -426,46 +420,13 @@ class AutoML:
         if flush_intermediate_steps:
             _flush_intermediate_steps(ds, [self.ds_name, 'sample_frac', str(int(ds_sample_frac*100))])
 
-        #setting Y
         self.y_colname = y_colname
-        self.y_full = ds[[self.y_colname]]
-        self.__y_encoder = None
-        self.y = np.asanyarray(self.y_full).reshape(-1, 1).ravel()
-        self.y_is_binary = False
-        self.y_classes = None
-        
-        if self.YisCategorical():
-            print('ML problem type: Classification')
-            #encoding
-            self.__y_encoder = OrdinalEncoder(dtype=int)
-            self.y_full = pd.DataFrame(self.__y_encoder.fit_transform(self.y_full), columns=[self.y_colname])
+        if type(self.y_colname) == str:
+            self.y_colname = [self.y_colname]
 
-            self.y_classes = np.sort(self.y_full[self.y_colname].unique())
-            self.y_is_binary = len(self.y_classes) == 2
-
-            if not self.y_is_binary: #multiclass 
-                #adjusting the metrics for multiclass target
-                for i, m in enumerate(self.metrics_classification_list):
-                    if m == 'f1':
-                        self.metrics_classification_list[i] = 'f1_weighted'
-                    elif m == 'roc_auc':
-                        self.metrics_classification_list[i] = 'roc_auc_ovr_weighted'
-                    elif m == 'accuracy':
-                        self.metrics_classification_list[i] = 'balanced_accuracy'
-                    elif m == 'recall':
-                        self.metrics_classification_list[i] = 'recall_weighted'
-                    elif m == 'precision':
-                        self.metrics_classification_list[i] = 'precision_weighted'
-
-        else:
-            print('ML problem type: Regression')
-
-        print('   Applied metrics:', self.metrics_classification_list)
-        
         #setting X
         self.X = ds.drop(self.y_colname, axis=1)
         self.__onehot_encoder = OneHotEncoder(sparse=False, dtype=int)
-
         hot_columns = []
         str_columns = []
         for i, col in enumerate(self.X.columns):
@@ -494,74 +455,132 @@ class AutoML:
             if flush_intermediate_steps:
                 _flush_intermediate_steps(ds, [self.ds_name, 'ONE_HOT_ENC', len(hot_columns)])
             
-        
         #normalizing the variables
         print('Normalizing the variables...')
         self.scaler = preprocessing.MinMaxScaler()
         self.X = pd.DataFrame(self.scaler.fit_transform(self.X), columns=self.X.columns) 
 
-        #splitting dataset
-        print('Splitting dataset...')
-        self.X_train, self.X_test, self.y_train, self.y_test = self.__train_test_split()
-        print('   X_train dimensions:', self.X_train.shape)
-        self.y_train = np.asanyarray(self.y_train).reshape(-1, 1).ravel()
-        self.y_test = np.asanyarray(self.y_test).reshape(-1, 1).ravel()
+        #setting Y
+        self.y_full = ds[self.y_colname]
+        self.__y_encoder = [None]*len(self.y_colname)
+        #self.y = np.asanyarray(self.y_full).reshape(-1, 1).ravel()
+        self.y_is_binary = [False]*len(self.y_colname)
+        self.y_classes = [None]*len(self.y_colname)
+        self.X_train = [None]*len(self.y_colname)
+        self.X_test = [None]*len(self.y_colname)
+        self.y_train = [None]*len(self.y_colname)
+        self.y_test = [None]*len(self.y_colname)
         
-        #running feature engineering in parallel
-        if features_engineering:
-            n_cols = self.X_train.shape[1]
-            print('Features engineering - Testing correlation with Y...')
-            considered_features = Parallel(n_jobs=-1, backend="multiprocessing")(delayed(features_corr_level_Y)
-                                    (i
-                                    , self.X_train.iloc[:,i]._to_pandas()
-                                    , self.y_train
-                                    , self.__min_x_y_correlation_rate)
-                                    for i in range(0, n_cols))
-            considered_features = [x for x in considered_features if x is not None]
-            self.X_train = self.X_train.iloc[:,considered_features]
-            self.X_test = self.X_test.iloc[:,considered_features]
-            
-            def n_features_2str():
-                return "{:.2f}".format(100*(1-len(considered_features)/self.X.shape[1])) + "% (" + str(len(considered_features)) + " remained)"
-            
-            print('   Features engineering - Features reduction after correlation test with Y:'
-                , n_features_2str())
-            
-            print('Features engineering - Testing redudance between features...')    
-            
-            n_cols = self.X_train.shape[1]
-            considered_features = Parallel(n_jobs=-1, backend="multiprocessing")(delayed(features_corr_level_X)
-                                    (i
-                                    , self.X_train.iloc[:,i]._to_pandas()
-                                    , self.X_train.iloc[:,i+1:]._to_pandas()
-                                    , (1-self.__min_x_y_correlation_rate))
-                                    for i in range(0, n_cols-1))
+        self.metrics_regression_list = metrics
+        self.metrics_classification_list = metrics
+        if metrics is None:
+            self.metrics_regression_list = [None]*len(self.y_colname)
+            self.metrics_classification_list = [None]*len(self.y_colname)
+            for i in range(len(self.y_colname)):
+                self.metrics_regression_list[i] = ['r2', 'neg_mean_absolute_error', 'neg_mean_squared_error']
+                self.metrics_classification_list[i] = ['f1', 'accuracy', 'roc_auc']
+        #metrics reference: https://scikit-learn.org/stable/modules/model_evaluation.html
 
-            considered_features = [x for x in considered_features if x is not None]
-            self.X_train = self.X_train.iloc[:,considered_features]
-            self.X_test = self.X_test.iloc[:,considered_features]
-            
-            print('   Features engineering - Features reduction after redudance test:'
-                , n_features_2str())
+        def __train_test_split(y_col_name):
+            y = self.y_full[y_col_name]
+
+            stratify=None
+            if self.YisCategorical(y_col_name):
+                stratify = y
+                
+            return train_test_split(self.X, y, train_size=0.8, test_size=0.2, random_state=self.RANDOM_STATE, stratify=stratify)
+
+        for i, y in enumerate(self.y_colname):
+            if self.YisCategorical(y):
+                print('[' + y + '] ML problem type: Classification')
+                #encoding
+                self.__y_encoder[i] = OrdinalEncoder(dtype=int)
+                self.y_full[y] = pd.DataFrame(self.__y_encoder[i].fit_transform(np.asanyarray(self.y_full[y]).reshape(-1, 1)), columns=[self.y_colname[i]])
+
+                self.y_classes[i] = np.sort(self.y_full[y].unique())
+                self.y_is_binary[i] = len(self.y_classes[i]) == 2
+
+                if not self.y_is_binary[i]: #multiclass 
+                    #adjusting the metrics for multiclass target
+                    for j, m in enumerate(self.metrics_classification_list[i]):
+                        if m == 'f1':
+                            self.metrics_classification_list[i][j] = 'f1_weighted'
+                        elif m == 'roc_auc':
+                            self.metrics_classification_list[i][j] = 'roc_auc_ovr_weighted'
+                        elif m == 'accuracy':
+                            self.metrics_classification_list[i][j] = 'balanced_accuracy'
+                        elif m == 'recall':
+                            self.metrics_classification_list[i][j] = 'recall_weighted'
+                        elif m == 'precision':
+                            self.metrics_classification_list[i][j] = 'precision_weighted'
+
+            else:
+                print('[' + y + '] ML problem type: Regression')
+
+            print('[' + y + ']    Applied metrics:', self.metrics_classification_list[i])
+            #splitting dataset
+            print('[' + y + ']    Splitting dataset...')
+            self.X_train[i], self.X_test[i], self.y_train[i], self.y_test[i] = __train_test_split(y)
+            print('   X_train dimensions:', self.X_train[i].shape)
+            print('   y_train dimensions:', self.y_train[i].shape)
+            self.y_train[i] = np.asanyarray(self.y_train[i]).reshape(-1, 1).ravel()
+            self.y_test[i] = np.asanyarray(self.y_test[i]).reshape(-1, 1).ravel()
+
+            #running feature engineering in parallel
+            if features_engineering:
+                n_cols = self.X_train[i].shape[1]
+                print('[' + y + '] Features engineering - Testing correlation with Y...')
+                considered_features = Parallel(n_jobs=-1, backend="multiprocessing")(delayed(features_corr_level_Y)
+                                        (j
+                                        , self.X_train[i].iloc[:,j]._to_pandas()
+                                        , self.y_train[i]
+                                        , self.__min_x_y_correlation_rate)
+                                        for j in range(0, n_cols))
+                considered_features = [x for x in considered_features if x is not None]
+                self.X_train[i] = self.X_train[i].iloc[:,considered_features]
+                self.X_test[i] = self.X_test[i].iloc[:,considered_features]
+                
+                def n_features_2str():
+                    return "{:.2f}".format(100*(1-len(considered_features)/self.X.shape[1])) + "% (" + str(len(considered_features)) + " remained)"
+                
+                print('[' + y + ']   Features engineering - Features reduction after correlation test with Y:'
+                    , n_features_2str())
+                
+                print('[' + y + '] Features engineering - Testing redudance between features...')    
+                
+                n_cols = self.X_train[i].shape[1]
+                considered_features = Parallel(n_jobs=-1, backend="multiprocessing")(delayed(features_corr_level_X)
+                                        (j
+                                        , self.X_train[i].iloc[:,j]._to_pandas()
+                                        , self.X_train[i].iloc[:,j+1:]._to_pandas()
+                                        , (1-self.__min_x_y_correlation_rate))
+                                        for j in range(0, n_cols-1))
+
+                considered_features = [x for x in considered_features if x is not None]
+                self.X_train[i] = self.X_train[i].iloc[:,considered_features]
+                self.X_test[i] = self.X_test[i].iloc[:,considered_features]
+                
+                print('[' + y + ']   Features engineering - Features reduction after redudance test:'
+                    , n_features_2str())
             
         if flush_intermediate_steps and flush_transformed_ds_sample_frac > 0 and flush_transformed_ds_sample_frac <= 1:
-            #saving results in a csv file
-            n_rows = int(flush_transformed_ds_sample_frac*self.X_train.shape[0])
-            trans_df = pd.concat([self.X_train.iloc[:n_rows].reset_index(drop=True)
-                                  , pd.DataFrame(self.y_train[:n_rows], columns=['y'])]
-                                 , axis=1, ignore_index=True)
-            n_rows = int(flush_transformed_ds_sample_frac*self.X_test.shape[0])
-            trans_df = pd.concat([trans_df, pd.concat([self.X_test.iloc[:n_rows].reset_index(drop=True)
-                                                       , pd.DataFrame(self.y_test[:n_rows], columns=['y'])]
-                                                      , axis=1, ignore_index=True).reset_index(drop=True)]
-                                 , axis=0, ignore_index=True).reset_index(drop=True)
+            #getting the set of columns to be flushed
+            col_names = set()
+            for i in range(len(self.y_colname)):
+                col_names = col_names.union(set(self.X_train[i].columns))
             
-            col_names = list(self.X_train.columns)
-            col_names.append('y')
+            col_names = list(col_names)
+            #saving results in a csv file
+            n_rows = int(flush_transformed_ds_sample_frac*self.X.shape[0])
+            
+            trans_df = pd.concat([self.X[col_names].iloc[:n_rows].reset_index(drop=True)
+                                  , pd.DataFrame(self.y_full[:n_rows], columns=self.y_colname)]
+                                 , axis=1, ignore_index=True)
+            
+            col_names.extend(self.y_colname)
             trans_df.columns = col_names
 
-            _flush_intermediate_steps(trans_df, label_list=['TRANS', int(flush_transformed_ds_sample_frac*100)])            
-            
+            _flush_intermediate_steps(trans_df, label_list=[self.ds_name, 'AFTER_FEATENG', int(flush_transformed_ds_sample_frac*100)])            
 
     def clearResults(self):
         self.results = None #cleaning the previous results
@@ -625,7 +644,7 @@ class AutoML:
                    
         #else to get results
         t0 = time.perf_counter()
-
+        
         #dataframe format: ['algorithm', 'params', 'features', 'n_features', 'train_time', 'predict_time', 'mem_max', <metrics>]
         columns_list = ['algorithm', 'params', 'features', 'n_features', 'train_time', 'predict_time', 'mem_max']
         
@@ -694,6 +713,8 @@ class AutoML:
         self.results = self.results.rename_axis('train_order').reset_index()        
 
         print('Fit Time (GA):', int(time.perf_counter() - t0), 's')
+        
+        ray.shutdown()
         return self.results
     
     def getMetrics(self):
@@ -705,15 +726,15 @@ class AutoML:
     def Ytype(self):
         return type(self.y_full.iloc[0,0])
     
-    def YisCategorical(self) -> bool:
-        y_type = type(self.y_full.iloc[0,0])
+    def YisCategorical(self, col_name) -> bool:
+        y_type = type(self.y_full[col_name].iloc[0,0])
         
         if (y_type == np.bool_
             or y_type == np.str_):
             return True
         #else
         if ((y_type == np.float_)
-            or (len(self.y_full[self.y_colname].unique()) > self.__unique_categoric_limit)):
+            or (len(self.y_full[col_name].unique()) > self.__unique_categoric_limit)):
             return False
         #else
         return True    
@@ -721,14 +742,6 @@ class AutoML:
     def YisContinuous(self) -> bool:
         return not self.YisCategorical()
                    
-    def __train_test_split(self):
-        y = self.y_full
-
-        stratify=None
-        if self.YisCategorical():
-            stratify = y
-            
-        return train_test_split(self.X, y, train_size=0.8, test_size=0.2, random_state=self.RANDOM_STATE, stratify=stratify)
 
 #utilitary methods
 
@@ -755,22 +768,28 @@ def testAutoML(ds, y_colname):
 
 if __name__ == '__main__':
     #pool = Pool(processes=10)
-    automl = AutoML('datasets/iris.csv', 'class'
-                    , ds_source_header_names=['sepal_length', 'sepal_width', 'petal_length', 'petal_width', 'class']
+    #automl = AutoML('datasets/iris.csv', 'class'
+    #                , ds_source_header_names=['sepal_length', 'sepal_width', 'petal_length', 'petal_width', 'class']
     #automl = AutoML(util.getDSWine_RED(), 'quality'
     #automl = AutoML('datasets/viaturas4Model.csv', 'y'
-                    , flush_intermediate_steps = True
-                    , flush_transformed_ds_sample_frac=0.1
-                    , ds_sample_frac = 0.5
-                    , min_x_y_correlation_rate=0.015
+    #ds_test_multiple_y = pd.read_csv('results/20220109_095911_TRANS_100.csv')
+    #ds_test_multiple_y['y2'] = (ds_test_multiple_y['y']-1).abs()
+    #ds_test_multiple_y.to_csv('datasets/multilple_y.csv', index=False)
+    #print(ds_test_multiple_y)
+    #exit()    
+    automl = AutoML('results/20220109_155652_VIATURAS_FASTTEST_AFTER_FEATENG_100.csv', ['y', 'y2']
+                    , flush_intermediate_steps = False
+                    , flush_transformed_ds_sample_frac=1
+                    , ds_sample_frac = 1
+                    , min_x_y_correlation_rate=0.1
                     , ngen=1
-                    , ds_name='viaturas'
+                    , ds_name='viaturas_fasttest'
                     , algorithms={KNeighborsClassifier: 
                         {"n_neighbors": [3,5,7]
                          , "p": [2, 3]
                          , "n_jobs": [-1]}
                         , XGBRFRegressor:{}}
-                    , features_engineering=True
+                    , features_engineering=False
                     , n_inter_bayessearch=3)
     print(automl.getResults())
     print(automl.getBestResult())
