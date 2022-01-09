@@ -1,7 +1,0 @@
-algorithm,features,n_features,train_time,mem_max,f1_weighted,balanced_accuracy,roc_auc_ovr_weighted,confusion_matrix
-KNeighborsClassifier(n_jobs=-1),"('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,43.0189414,1901.45703125,0.9665831244778613,0.9666666666666667,1.0,"[[10  0  0]
- [ 0 10  0]
- [ 1  0  9]]"
-KNeighborsClassifier(n_jobs=-1),"('sepal_length', 'sepal_width', 'petal_width')",3,32.833587300000005,1953.69921875,0.9665831244778613,0.9666666666666667,1.0,"[[10  0  0]
- [ 0 10  0]
- [ 1  0  9]]"

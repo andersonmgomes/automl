@@ -1,4 +1,0 @@
-algorithm,features,n_features,train_time,mem_max,f1_weighted,balanced_accuracy,roc_auc_ovr_weighted,confusion_matrix
-KNeighborsClassifier(n_jobs=-1),"('sepal_length', 'sepal_width', 'petal_length', 'petal_width')",4,41.9029289,1895.5859375,0.9333333333333333,0.9333333333333332,0.9949999999999999,"[[10  0  0]
- [ 0  9  1]
- [ 0  1  9]]"

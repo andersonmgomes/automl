@@ -42,17 +42,30 @@ import os
 from sklearn.neural_network import MLPClassifier
 from sklearn.exceptions import ConvergenceWarning
 
-def flushResults(automl_obj):
-    #saving results in a csv file
-    filename = automl_obj.start_time.strftime("%Y%m%d_%H%M%S")
-    if not(automl_obj.ds_name is None):
-        filename += '_' + automl_obj.ds_name.upper()
+def _flush_intermediate_steps(df, label_list = [''], dth=datetime.now(), index=False, header=True):
+    #saving df in a csv file
+    filename = dth.strftime("%Y%m%d_%H%M%S")
+    
+    if type(label_list) is str:
+        label_list = [label_list]
+        
+    for label in label_list:
+        label = str(label)
+        if label != '' and label is not None:
+            filename += '_' + label.strip().upper()
+    
     filename += '.csv'
+    
     filedir = './results'
     if not os.path.exists(filedir):
         os.mkdir(filedir)
-    automl_obj.results.to_csv(os.path.join(filedir, filename), index=False)
-    
+
+    df.to_csv(os.path.join(filedir, filename), index=index, header=header)
+
+def flushResults(automl_obj):
+    #saving results in a csv file
+    _flush_intermediate_steps(automl_obj.results, ['RESULTS', automl_obj.ds_name], automl_obj.start_time)
+
 def features_corr_level_Y(i, X, y, threshold):
     #features engineering
     #testing correlation between X and Y
@@ -375,6 +388,9 @@ class AutoML:
                  , n_inter_bayessearch = 30
                  , ds_source_header='infer'
                  , ds_source_header_names=None
+                 , flush_intermediate_steps = False
+                 , flush_transformed_ds_sample_frac = 0
+                 , ds_sample_frac = 1
                  ) -> None:
         self.start_time = datetime.now()
         ProgressBar.enable()
@@ -406,7 +422,9 @@ class AutoML:
         print('Dataset dimensions after drop NaN values:', ds.shape)
         
         #shuffle data to minimize bias tendency
-        ds = ds.sample(frac=1)
+        ds = ds.sample(frac=ds_sample_frac)
+        if flush_intermediate_steps:
+            _flush_intermediate_steps(ds, [self.ds_name, 'sample_frac', str(int(ds_sample_frac*100))])
 
         #setting Y
         self.y_colname = y_colname
@@ -473,6 +491,9 @@ class AutoML:
             self.X = pd.concat([self.X.drop(hot_columns, axis=1)
                                 , pd.DataFrame(self.__onehot_encoder.transform(self.X[hot_columns])
                                             , columns=hot_cols_names)], axis=1)
+            if flush_intermediate_steps:
+                _flush_intermediate_steps(ds, [self.ds_name, 'ONE_HOT_ENC', len(hot_columns)])
+            
         
         #normalizing the variables
         print('Normalizing the variables...')
@@ -522,6 +543,25 @@ class AutoML:
             
             print('   Features engineering - Features reduction after redudance test:'
                 , n_features_2str())
+            
+        if flush_intermediate_steps and flush_transformed_ds_sample_frac > 0 and flush_transformed_ds_sample_frac <= 1:
+            #saving results in a csv file
+            n_rows = int(flush_transformed_ds_sample_frac*self.X_train.shape[0])
+            trans_df = pd.concat([self.X_train.iloc[:n_rows].reset_index(drop=True)
+                                  , pd.DataFrame(self.y_train[:n_rows], columns=['y'])]
+                                 , axis=1, ignore_index=True)
+            n_rows = int(flush_transformed_ds_sample_frac*self.X_test.shape[0])
+            trans_df = pd.concat([trans_df, pd.concat([self.X_test.iloc[:n_rows].reset_index(drop=True)
+                                                       , pd.DataFrame(self.y_test[:n_rows], columns=['y'])]
+                                                      , axis=1, ignore_index=True).reset_index(drop=True)]
+                                 , axis=0, ignore_index=True).reset_index(drop=True)
+            
+            col_names = list(self.X_train.columns)
+            col_names.append('y')
+            trans_df.columns = col_names
+
+            _flush_intermediate_steps(trans_df, label_list=['TRANS', int(flush_transformed_ds_sample_frac*100)])            
+            
 
     def clearResults(self):
         self.results = None #cleaning the previous results
@@ -715,13 +755,16 @@ def testAutoML(ds, y_colname):
 
 if __name__ == '__main__':
     #pool = Pool(processes=10)
-    #automl = AutoML('datasets/iris.csv', 'class'
-    #                , ds_source_header_names=['sepal_length', 'sepal_width', 'petal_length', 'petal_width', 'class']
+    automl = AutoML('datasets/iris.csv', 'class'
+                    , ds_source_header_names=['sepal_length', 'sepal_width', 'petal_length', 'petal_width', 'class']
     #automl = AutoML(util.getDSWine_RED(), 'quality'
-    automl = AutoML('datasets/viaturas4Model.csv', 'y'
-                    , min_x_y_correlation_rate=0.10
+    #automl = AutoML('datasets/viaturas4Model.csv', 'y'
+                    , flush_intermediate_steps = True
+                    , flush_transformed_ds_sample_frac=0.1
+                    , ds_sample_frac = 0.5
+                    , min_x_y_correlation_rate=0.015
                     , ngen=1
-                    , ds_name='iris'
+                    , ds_name='viaturas'
                     , algorithms={KNeighborsClassifier: 
                         {"n_neighbors": [3,5,7]
                          , "p": [2, 3]
