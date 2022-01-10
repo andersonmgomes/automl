@@ -42,7 +42,7 @@ import os
 from sklearn.neural_network import MLPClassifier
 from sklearn.exceptions import ConvergenceWarning
 
-def _flush_intermediate_steps(df, label_list = [''], dth=datetime.now(), index=False, header=True):
+def _flush_intermediate_steps(df, label_list = [''], dth=datetime.now(), index=False):
     #saving df in a csv file
     filename = dth.strftime("%Y%m%d_%H%M%S")
     
@@ -54,13 +54,13 @@ def _flush_intermediate_steps(df, label_list = [''], dth=datetime.now(), index=F
         if label != '' and label is not None:
             filename += '_' + label.strip().upper().replace(' ', '_')
     
-    filename += '.csv'
+    filename += '.gzip'
     
     filedir = './results'
     if not os.path.exists(filedir):
         os.mkdir(filedir)
 
-    df.to_csv(os.path.join(filedir, filename), index=index, header=header)
+    df.to_parquet(os.path.join(filedir, filename), index=index, compression='gzip')
 
 def flushResults(automl_obj, y):
     #saving results in a csv file
@@ -286,6 +286,39 @@ def ga_toolbox(automl_obj, y):
     toolbox.register("mutate", tools.mutFlipBit, indpb=0.1)
     toolbox.register("select", tools.selTournament, tournsize=3)
     return toolbox
+
+# source: https://www.kaggle.com/ratan123/m5-forecasting-lightgbm-with-timeseries-splits
+
+def reduce_mem_usage(df, verbose=True):
+    numerics = ['int16', 'int32', 'int64', 'float16', 'float32', 'float64']
+    start_mem = df.memory_usage().sum() / 1024**2    
+    for col in df.columns:
+        col_type = df[col].dtypes
+        if col_type in numerics:
+            c_min = df[col].min()
+            c_max = df[col].max()
+            if str(col_type)[:3] == 'int':
+                if c_min > np.iinfo(np.int8).min and c_max < np.iinfo(np.int8).max:
+                    df[col] = df[col].astype(np.int8)
+                elif c_min > np.iinfo(np.int16).min and c_max < np.iinfo(np.int16).max:
+                    df[col] = df[col].astype(np.int16)
+                elif c_min > np.iinfo(np.int32).min and c_max < np.iinfo(np.int32).max:
+                    df[col] = df[col].astype(np.int32)
+                elif c_min > np.iinfo(np.int64).min and c_max < np.iinfo(np.int64).max:
+                    df[col] = df[col].astype(np.int64)  
+            else:
+                if c_min > np.finfo(np.float16).min and c_max < np.finfo(np.float16).max:
+                    df[col] = df[col].astype(np.float16)
+                elif c_min > np.finfo(np.float32).min and c_max < np.finfo(np.float32).max:
+                    df[col] = df[col].astype(np.float32)
+                else:
+                    df[col] = df[col].astype(np.float64)    
+    end_mem = df.memory_usage().sum() / 1024**2
+    if verbose: 
+        print('Mem. usage decreased to {:5.2f} Mb ({:.1f}% reduction)'.format(
+            end_mem, 100 * (start_mem - end_mem) / start_mem))
+    return df
+
 class AutoML:
     ALGORITHMS = {
         #classifiers
@@ -390,8 +423,9 @@ class AutoML:
                  , ds_source_header='infer'
                  , ds_source_header_names=None
                  , flush_intermediate_steps = False
-                 , flush_transformed_ds_sample_frac = 0
+                 , flush_transformed_ds_sample_frac = 1
                  , ds_sample_frac = 1
+                 , do_redundance_test_X = False
                  ) -> None:
         self.start_time = datetime.now()
         ProgressBar.enable()
@@ -414,8 +448,14 @@ class AutoML:
         self.X_bitmap_map = {}
         self.main_metric_map = {}
         
-        if type(ds_source) == str and ds_source.endswith('.csv'):
-            ds_source = pd.read_csv(ds_source, header=ds_source_header, names=ds_source_header_names)
+        if type(ds_source) == str:
+            if ds_source.endswith('.csv'):
+                ds_source = pd.read_csv(ds_source, header=ds_source_header, names=ds_source_header_names)
+            elif ds_source.endswith('.gzip'):
+                ds_source = pd.read_parquet(ds_source)
+        
+        print('Optimizing the source dataset:')
+        ds_source = reduce_mem_usage(ds_source)
         
         print('Original dataset dimensions:', ds_source.shape)
         #NaN values
@@ -527,8 +567,8 @@ class AutoML:
             #splitting dataset
             print('[' + y + ']    Splitting dataset...')
             self.X_train_map[y], self.X_test_map[y], self.y_train_map[y], self.y_test_map[y] = __train_test_split(y)
-            print('   X_train dimensions:', self.X_train_map[y].shape)
-            print('   y_train dimensions:', self.y_train_map[y].shape)
+            print('[' + y + ']   X_train dimensions:', self.X_train_map[y].shape)
+            print('[' + y + ']   y_train dimensions:', self.y_train_map[y].shape)
             self.y_train_map[y] = np.asanyarray(self.y_train_map[y]).reshape(-1, 1).ravel()
             self.y_test_map[y] = np.asanyarray(self.y_test_map[y]).reshape(-1, 1).ravel()
 
@@ -552,22 +592,23 @@ class AutoML:
                 print('[' + y + ']   Features engineering - Features reduction after correlation test with Y:'
                     , n_features_2str())
                 
-                print('[' + y + '] Features engineering - Testing redudance between features...')    
-                
-                n_cols = self.X_train_map[y].shape[1]
-                considered_features = Parallel(n_jobs=-1, backend="multiprocessing")(delayed(features_corr_level_X)
-                                        (j
-                                        , self.X_train_map[y].iloc[:,j]._to_pandas()
-                                        , self.X_train_map[y].iloc[:,j+1:]._to_pandas()
-                                        , (1-self.__min_x_y_correlation_rate))
-                                        for j in range(0, n_cols-1))
+                if do_redundance_test_X:
+                    print('[' + y + '] Features engineering - Testing redudance between features...')    
+                    
+                    n_cols = self.X_train_map[y].shape[1]
+                    considered_features = Parallel(n_jobs=-1, backend="multiprocessing")(delayed(features_corr_level_X)
+                                            (j
+                                            , self.X_train_map[y].iloc[:,j]._to_pandas()
+                                            , self.X_train_map[y].iloc[:,j+1:]._to_pandas()
+                                            , (1-self.__min_x_y_correlation_rate))
+                                            for j in range(0, n_cols-1))
 
-                considered_features = [x for x in considered_features if x is not None]
-                self.X_train_map[y] = self.X_train_map[y].iloc[:,considered_features]
-                self.X_test_map[y] = self.X_test_map[y].iloc[:,considered_features]
-                
-                print('[' + y + ']   Features engineering - Features reduction after redudance test:'
-                    , n_features_2str())
+                    considered_features = [x for x in considered_features if x is not None]
+                    self.X_train_map[y] = self.X_train_map[y].iloc[:,considered_features]
+                    self.X_test_map[y] = self.X_test_map[y].iloc[:,considered_features]
+                    
+                    print('[' + y + ']   Features engineering - Features reduction after redudance test:'
+                        , n_features_2str())
             
         if flush_intermediate_steps and flush_transformed_ds_sample_frac > 0 and flush_transformed_ds_sample_frac <= 1:
             #getting the set of columns to be flushed
@@ -795,8 +836,8 @@ if __name__ == '__main__':
     #ds_test_multiple_y.to_csv('datasets/multilple_y.csv', index=False)
     #print(ds_test_multiple_y)
     #exit()    
-    #automl = AutoML('results/20220109_155652_VIATURAS_FASTTEST_AFTER_FEATENG_100.csv', ['y', 'y2']
-    automl = AutoML('datasets/multilple_y.csv', ['y', 'y2']
+    automl = AutoML('results/20220109_155652_VIATURAS_FASTTEST_AFTER_FEATENG_100.csv', ['y', 'y2']
+    #automl = AutoML('datasets/multilple_y.csv', ['y', 'y2']
                     , flush_intermediate_steps = True
                     , flush_transformed_ds_sample_frac=1
                     , ds_sample_frac = 1
