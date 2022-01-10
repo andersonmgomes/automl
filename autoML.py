@@ -60,11 +60,17 @@ def _flush_intermediate_steps(df, label_list = [''], dth=datetime.now(), index=F
     if not os.path.exists(filedir):
         os.mkdir(filedir)
 
-    df.to_parquet(os.path.join(filedir, filename), index=index, compression='gzip')
+    df.to_parquet(os.path.join(filedir, filename), index=index
+                  , compression='gzip', engine='fastparquet'
+                  )
 
 def flushResults(automl_obj, y):
-    #saving results in a csv file
-    _flush_intermediate_steps(automl_obj.results[y], ['RESULTS', automl_obj.ds_name, y], automl_obj.start_time)
+    df = automl_obj.results[y].copy()
+    #convert object to string
+    df['algorithm'] = df['algorithm'].astype(str)
+    df['features'] = df['features'].astype(str)
+    df['confusion_matrix'] = df['confusion_matrix'].astype(str)
+    _flush_intermediate_steps(df, ['RESULTS', automl_obj.ds_name, y], automl_obj.start_time)
 
 def features_corr_level_Y(i, X, y, threshold):
     #features engineering
@@ -319,6 +325,27 @@ def reduce_mem_usage(df, verbose=True):
             end_mem, 100 * (start_mem - end_mem) / start_mem))
     return df
 
+def optimize_pandas():
+#souce: https://realpython.com/python-pandas-tricks/
+    options = {
+        'display': {
+            'max_columns': None,
+            'max_colwidth': 25,
+            'expand_frame_repr': False,  # Don't wrap to multiple pages
+            'max_rows': 14,
+            'max_seq_items': 50,         # Max length of printed sequence
+            'precision': 4,
+            'show_dimensions': False
+        },
+        'mode': {
+            'chained_assignment': None   # Controls SettingWithCopyWarning
+        }
+    }
+
+    for category, option in options.items():
+        for op, value in option.items():
+            pd.set_option(f'{category}.{op}', value)  # Python 3.6+
+
 class AutoML:
     ALGORITHMS = {
         #classifiers
@@ -430,6 +457,8 @@ class AutoML:
         self.start_time = datetime.now()
         ProgressBar.enable()
         ray.init(ignore_reinit_error=True)
+        optimize_pandas()
+
         #initializing variables
         self.results = {}
         self.algorithms = algorithms
@@ -836,14 +865,14 @@ if __name__ == '__main__':
     #ds_test_multiple_y.to_csv('datasets/multilple_y.csv', index=False)
     #print(ds_test_multiple_y)
     #exit()    
-    automl = AutoML('results/20220109_155652_VIATURAS_FASTTEST_AFTER_FEATENG_100.csv', ['y', 'y2']
+    automl = AutoML('results/20220110_145100_VIATURAS_FASTTEST_SAMPLE_FRAC_100.gzip', ['y', 'y2']
     #automl = AutoML('datasets/multilple_y.csv', ['y', 'y2']
                     , flush_intermediate_steps = True
                     , flush_transformed_ds_sample_frac=1
                     , ds_sample_frac = 1
-                    , min_x_y_correlation_rate=0.1
+                    , min_x_y_correlation_rate=0.005
                     , ngen=1
-                    , ds_name='viaturas_fasttest'
+                    , ds_name='viaturas_fast'
                     , algorithms={KNeighborsClassifier: 
                         {"n_neighbors": [3,5,7]
                          , "p": [2, 3]
