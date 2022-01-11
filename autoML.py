@@ -42,6 +42,8 @@ from xgboost import XGBClassifier, XGBRegressor, XGBRFRegressor
 import os
 from sklearn.neural_network import MLPClassifier
 from sklearn.exceptions import ConvergenceWarning
+import logging
+logging.basicConfig(level=logging.INFO, format='%(message)s')
 
 def _flush_intermediate_steps(df, label_list = [''], dth=datetime.now(), index=False, output_type='gzip'):
     #saving df in a csv file
@@ -111,7 +113,7 @@ def is_Voting_or_Stacking(a):
             or isinstance(a, VotingClassifier) or isinstance(a, StackingClassifier))
     
 def evaluation(individual, automl_obj, y):
-    #print(individual)
+    #logging.info(individual)
     algo_instance = individual[-automl_obj.n_bits_algos_map[y]:]
     # in this point the variable algo_instance is a bitarray
     algo_instance = bautil.ba2int(bitarray(algo_instance)) % len(automl_obj.selected_algos_map[y])
@@ -245,7 +247,7 @@ def evaluation(individual, automl_obj, y):
         if row_result[automl_obj.main_metric_map[y]] > best_score:
             best_score = row_result[automl_obj.main_metric_map[y]]
             
-        log_msg = '\n*[' + y + '] Model trained: ' + str(scoring_list[0]) 
+        log_msg = '*[' + y + '] Model trained: ' + str(scoring_list[0]) 
         log_msg += ' = {:.5f}'.format(row_result[automl_obj.main_metric_map[y]]) 
         log_msg += ' | ' + str(algo_instance)[:str(algo_instance).find('(')] 
         log_msg += ' | ' + str(len(col_tuple)) + ' features'
@@ -253,7 +255,7 @@ def evaluation(individual, automl_obj, y):
         params_str = params_str.replace("'n_jobs': -1,","").replace("  ", " ").replace("{ ", "{").replace(" }", "}")
         log_msg += ' | ' + params_str
 
-        print(log_msg[:150])#show only the 150 first caracteres
+        logging.info(log_msg[:150])#show only the 150 first caracteres
  
     flushResults(automl_obj, y)
     return float2bigint(best_score) #main metric
@@ -300,7 +302,7 @@ def ga_toolbox(automl_obj, y):
 def reduce_mem_usage(df, verbose=True):
     numerics = ['int16', 'int32', 'int64', 'float16', 'float32', 'float64']
     start_mem = df.memory_usage().sum() / 1024**2
-    print('Original memory usage {:5.2f} Mb'.format(start_mem))
+    logging.info('Original memory usage {:5.2f} Mb'.format(start_mem))
     for col in df.columns:
         col_type = df[col].dtypes
         if col_type in numerics:
@@ -324,7 +326,7 @@ def reduce_mem_usage(df, verbose=True):
                     df[col] = df[col].astype(np.float64)    
     end_mem = df.memory_usage().sum() / 1024**2
     if verbose: 
-        print('Mem. usage decreased to {:5.2f} Mb ({:.1f}% reduction)'.format(
+        logging.info('Mem. usage decreased to {:5.2f} Mb ({:.1f}% reduction)'.format(
             end_mem, 100 * (start_mem - end_mem) / start_mem))
     return df
 
@@ -367,26 +369,26 @@ def parallel_process_y(automlobj, y):
     y_classes = None
 
     if automlobj.YisCategorical(y):
-        print('[' + y + '] ML problem type: Classification')
+        logging.info('[' + y + '] ML problem type: Classification')
         #encoding
         y_encoder = OrdinalEncoder(dtype=int)
         y_full = pd.DataFrame(y_encoder.fit_transform(np.asanyarray(automlobj.y_full[y]).reshape(-1, 1)), columns=[y])
         y_classes = np.sort(automlobj.y_full[y].unique())
     else:
-        print('[' + y + '] ML problem type: Regression')
+        logging.info('[' + y + '] ML problem type: Regression')
 
     #splitting dataset
-    print('[' + y + ']    Splitting dataset...')
+    logging.info('[' + y + ']    Splitting dataset...')
     X_train, X_test, y_train, y_test = __train_test_split(automlobj, y)
-    print('[' + y + ']   X_train dimensions:', X_train.shape)
-    print('[' + y + ']   y_train dimensions:', y_train.shape)
+    logging.info('[' + y + ']   X_train dimensions: ' + str(X_train.shape))
+    logging.info('[' + y + ']   y_train dimensions: ' + str(y_train.shape))
     y_train = np.asanyarray(y_train).reshape(-1, 1).ravel()
     y_test = np.asanyarray(y_test).reshape(-1, 1).ravel()
 
     #running feature engineering in parallel
     if automlobj.features_engineering:
         n_cols = X_train.shape[1]
-        print('[' + y + '] Features engineering - Testing correlation with Y...')
+        logging.info('[' + y + '] Features engineering - Testing correlation with Y...')
         considered_features = Parallel(n_jobs=-1, backend="threading")(delayed(features_corr_level_Y)
                                 (j
                                 , X_train.iloc[:,j]#._to_pandas()
@@ -400,11 +402,10 @@ def parallel_process_y(automlobj, y):
         def n_features_2str():
             return "{:.2f}".format(100*(1-len(considered_features)/automlobj.X.shape[1])) + "% (" + str(len(considered_features)) + " remained)"
         
-        print('[' + y + ']   Features engineering - Features reduction after correlation test with Y:'
-            , n_features_2str())
+        logging.info('[' + y + ']   Features engineering - Features reduction after correlation test with Y: ' + n_features_2str())
         
         if automlobj.do_redundance_test_X:
-            print('[' + y + '] Features engineering - Testing redudance between features...')    
+            logging.info('[' + y + '] Features engineering - Testing redudance between features...')    
             
             n_cols = X_train.shape[1]
             considered_features = Parallel(n_jobs=-1, backend="threading")(delayed(features_corr_level_X)
@@ -418,8 +419,7 @@ def parallel_process_y(automlobj, y):
             X_train = X_train.iloc[:,considered_features]
             X_test = X_test.iloc[:,considered_features]
             
-            print('[' + y + ']   Features engineering - Features reduction after redudance test:'
-                , n_features_2str())
+            logging.info('[' + y + ']   Features engineering - Features reduction after redudance test: ' + n_features_2str())
     
     if automlobj.flush_intermediate_steps:
         col_names = list(X_train.columns)
@@ -550,6 +550,9 @@ class AutoML:
                  , do_redundance_test_X = False
                  ) -> None:
         self.start_time = datetime.now()
+
+        #logging.basicConfig(format='%(asctime)s - %(message)s', datefmt='%d-%b-%y %H:%M:%S')
+                
         ProgressBar.enable()
         
         #ray_init()
@@ -582,13 +585,13 @@ class AutoML:
             elif ds_source.endswith('.gzip'):
                 ds_source = pd.read_parquet(ds_source)
         
-        print('Optimizing the source dataset:')
+        logging.info('Optimizing the source dataset:')
         ds_source = reduce_mem_usage(ds_source)
         
-        print('Original dataset dimensions:', ds_source.shape)
+        logging.info('Original dataset dimensions: ' + str(ds_source.shape))
         #NaN values
         ds = ds_source.dropna()
-        print('Dataset dimensions after drop NaN values:', ds.shape)
+        logging.info('Dataset dimensions after drop NaN values: ' + str(ds.shape))
         
         #shuffle data to minimize bias tendency
         ds = ds.sample(frac=ds_sample_frac)
@@ -615,7 +618,7 @@ class AutoML:
             self.X = self.X.drop(str_columns, axis=1)
             
         if len(hot_columns) > 0:
-            print('One hot encoder columns:', hot_columns)
+            logging.info('One hot encoder columns: ' +str(hot_columns))
             self.__onehot_encoder.fit(self.X[hot_columns])
             
             hot_cols_names = []
@@ -631,7 +634,7 @@ class AutoML:
                 _flush_intermediate_steps(ds, [self.ds_name, 'ONE_HOT_ENC', len(hot_columns)])
             
         #normalizing the variables
-        print('Normalizing the variables...')
+        logging.info('Normalizing the variables...')
         self.scaler = preprocessing.MinMaxScaler()
         self.X = pd.DataFrame(self.scaler.fit_transform(self.X), columns=self.X.columns) 
 
@@ -678,14 +681,12 @@ class AutoML:
                         self.metrics_classification_map[y][j] = 'recall_weighted'
                     elif m == 'precision':
                         self.metrics_classification_map[y][j] = 'precision_weighted'
-            print('[' + y + ']    Applied metrics:', self.metrics_classification_map[y])
+            logging.info('[' + y + ']    Applied metrics: ' + str(self.metrics_classification_map[y]))
             #X_train, X_test, y_train, y_test
             self.X_train_map[y] = tuple_result[5]
             self.X_test_map[y] = tuple_result[6]
             self.y_train_map[y] = tuple_result[7]
             self.y_test_map[y] = tuple_result[8]
-            
-            
             
         if self.flush_intermediate_steps:
             features_set = set()
@@ -789,7 +790,7 @@ class AutoML:
                 #else: all right
                 self.selected_algos_map[y].append(algo)
             
-            print('[' + y + '] Selected algorithms:', [self.__class2str(x) for x in self.selected_algos_map[y]])
+            #logging.info('[' + y + '] Selected algorithms:', [self.__class2str(x) for x in self.selected_algos_map[y]])
 
             #setup the bitmap to genetic algorithm
             self.n_bits_algos_map[y] = len(bautil.int2ba(len(self.selected_algos_map[y])-1))#TODO: analyze de number of bits to use
@@ -807,10 +808,10 @@ class AutoML:
                 if math.isinf(n_train_sets):
                     break
 
-            print('[' + y + '] Nº of training possible basic combinations:'
-                , n_train_sets*len(self.selected_algos_map[y])
-                , '(' + str(n_train_sets),'features combinations,'
-                , str(len(self.selected_algos_map[y])) +' algorithms)')
+            logging.info('[' + y + '] Nº of training possible basic combinations:'
+                + str(n_train_sets*len(self.selected_algos_map[y]))
+                + '(' + str(n_train_sets) + 'features combinations,'
+                + str(len(self.selected_algos_map[y])) +' algorithms)')
 
         del(result_list)
                 
@@ -828,7 +829,7 @@ class AutoML:
                                                  (y)
                                                  for y in self.y_colname_list)
         
-        print('Fit Time (GA):', int(time.perf_counter() - t0), 's')
+        logging.info('Fit Time (GA): ' + str(int(time.perf_counter() - t0)) + 's')
         return self.results
 
     def getMetrics(self, y):
@@ -871,13 +872,13 @@ def testAutoML(ds, y_colname):
     automl = AutoML(ds, y_colname, min_x_y_correlation_rate=0.06)
     #automl.setAlgorithm(svm.SVC())
     if automl.YisCategorical():
-        print(automl.getBestResult().confusion_matrix)
+        logging.info(str(automl.getBestResult().confusion_matrix))
     
     df4print = automl.__fit()
-    print(df4print.head())
-    print(automl.getBestResult())
+    logging.info(str(df4print.head()))
+    logging.info(str(automl.getBestResult()))
     if automl.getBestResult() is not None:
-        print(automl.getBestResult()['features'])
+        logging.info(str(automl.getBestResult()['features']))
     del(automl)
 
 if __name__ == '__main__':
@@ -889,7 +890,7 @@ if __name__ == '__main__':
     #ds_test_multiple_y = pd.read_csv('results/20220109_095911_TRANS_100.csv')
     #ds_test_multiple_y['y2'] = (ds_test_multiple_y['y']-1).abs()
     #ds_test_multiple_y.to_csv('datasets/multilple_y.csv', index=False)
-    #print(ds_test_multiple_y)
+    #logging.info(ds_test_multiple_y)
     #exit()    
     automl = AutoML('results/20220110_145100_VIATURAS_FASTTEST_SAMPLE_FRAC_100.gzip', ['y', 'y2']
     #automl = AutoML('datasets/multilple_y.csv', ['y', 'y2']
