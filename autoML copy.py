@@ -361,7 +361,7 @@ def __train_test_split(automlobj, y_col_name):
         
     return train_test_split(automlobj.X, y, train_size=0.8, test_size=0.2, random_state=automlobj.RANDOM_STATE, stratify=stratify)
 
-def process_y(automlobj, y, X_train_map):
+def process_y(automlobj, y):
     if automlobj.YisCategorical(y):
         print('[' + y + '] ML problem type: Classification')
         #encoding
@@ -391,24 +391,24 @@ def process_y(automlobj, y, X_train_map):
     print('[' + y + ']    Applied metrics:', automlobj.metrics_classification_map[y])
     #splitting dataset
     print('[' + y + ']    Splitting dataset...')
-    X_train_map[y], automlobj.X_test_map[y], automlobj.y_train_map[y], automlobj.y_test_map[y] = __train_test_split(automlobj, y)
-    print('[' + y + ']   X_train dimensions:', X_train_map[y].shape)
+    automlobj.X_train_map[y], automlobj.X_test_map[y], automlobj.y_train_map[y], automlobj.y_test_map[y] = __train_test_split(automlobj, y)
+    print('[' + y + ']   X_train dimensions:', automlobj.X_train_map[y].shape)
     print('[' + y + ']   y_train dimensions:', automlobj.y_train_map[y].shape)
     automlobj.y_train_map[y] = np.asanyarray(automlobj.y_train_map[y]).reshape(-1, 1).ravel()
     automlobj.y_test_map[y] = np.asanyarray(automlobj.y_test_map[y]).reshape(-1, 1).ravel()
 
     #running feature engineering in parallel
     if automlobj.features_engineering:
-        n_cols = X_train_map[y].shape[1]
+        n_cols = automlobj.X_train_map[y].shape[1]
         print('[' + y + '] Features engineering - Testing correlation with Y...')
         considered_features = Parallel(n_jobs=-1, backend="multiprocessing")(delayed(features_corr_level_Y)
                                 (j
-                                , X_train_map[y].iloc[:,j]#._to_pandas()
+                                , automlobj.X_train_map[y].iloc[:,j]#._to_pandas()
                                 , automlobj.y_train_map[y]
                                 , automlobj.min_x_y_correlation_rate)
                                 for j in range(0, n_cols))
         considered_features = [x for x in considered_features if x is not None]
-        X_train_map[y] = X_train_map[y].iloc[:,considered_features]
+        automlobj.X_train_map[y] = automlobj.X_train_map[y].iloc[:,considered_features]
         automlobj.X_test_map[y] = automlobj.X_test_map[y].iloc[:,considered_features]
         
         def n_features_2str():
@@ -420,27 +420,27 @@ def process_y(automlobj, y, X_train_map):
         if automlobj.do_redundance_test_X:
             print('[' + y + '] Features engineering - Testing redudance between features...')    
             
-            n_cols = X_train_map[y].shape[1]
+            n_cols = automlobj.X_train_map[y].shape[1]
             considered_features = Parallel(n_jobs=-1, backend="multiprocessing")(delayed(features_corr_level_X)
                                     (j
-                                    , X_train_map[y].iloc[:,j]#._to_pandas()
-                                    , X_train_map[y].iloc[:,j+1:]#._to_pandas()
+                                    , automlobj.X_train_map[y].iloc[:,j]#._to_pandas()
+                                    , automlobj.X_train_map[y].iloc[:,j+1:]#._to_pandas()
                                     , (1-automlobj.min_x_y_correlation_rate))
                                     for j in range(0, n_cols-1))
 
             considered_features = [x for x in considered_features if x is not None]
-            X_train_map[y] = X_train_map[y].iloc[:,considered_features]
+            automlobj.X_train_map[y] = automlobj.X_train_map[y].iloc[:,considered_features]
             automlobj.X_test_map[y] = automlobj.X_test_map[y].iloc[:,considered_features]
             
             print('[' + y + ']   Features engineering - Features reduction after redudance test:'
                 , n_features_2str())
     
     if automlobj.flush_intermediate_steps:
-        col_names = list(X_train_map[y].columns)
+        col_names = list(automlobj.X_train_map[y].columns)
         trans_df = pandas.DataFrame(columns=col_names)
         _flush_intermediate_steps(trans_df, label_list=[automlobj.ds_name, 'AFTER_FEATENG', y]
                                     , output_type='csv')            
-    return list(X_train_map[y].columns)
+    return list(automlobj.X_train_map[y].columns)
 class AutoML:
     ALGORITHMS = {
         #classifiers
@@ -654,8 +654,8 @@ class AutoML:
                 self.metrics_classification_map[y] = ['f1', 'accuracy', 'roc_auc']
         #metrics reference: https://scikit-learn.org/stable/modules/model_evaluation.html
 
-        selected_features = Parallel(n_jobs=-1, backend="multiprocessing")(delayed(process_y)
-                                (self, y, self.X_train_map)
+        selected_features = Parallel(n_jobs=-1, require='sharedmem')(delayed(process_y)
+                                (self, y)
                                 for y in self.y_colname_list)
             
         if self.flush_intermediate_steps:
