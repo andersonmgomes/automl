@@ -42,7 +42,7 @@ import os
 from sklearn.neural_network import MLPClassifier
 from sklearn.exceptions import ConvergenceWarning
 
-def _flush_intermediate_steps(df, label_list = [''], dth=datetime.now(), index=False):
+def _flush_intermediate_steps(df, label_list = [''], dth=datetime.now(), index=False, output_type='gzip'):
     #saving df in a csv file
     filename = dth.strftime("%Y%m%d_%H%M%S")
     
@@ -54,15 +54,16 @@ def _flush_intermediate_steps(df, label_list = [''], dth=datetime.now(), index=F
         if label != '' and label is not None:
             filename += '_' + label.strip().upper().replace(' ', '_')
     
-    filename += '.gzip'
+    filename += '.' + output_type
     
     filedir = './results'
     if not os.path.exists(filedir):
         os.mkdir(filedir)
 
-    df.to_parquet(os.path.join(filedir, filename), index=index
-                  , compression='gzip', engine='fastparquet'
-                  )
+    if output_type == 'gzip':
+        df.to_parquet(os.path.join(filedir, filename), index=index, compression='gzip', engine='fastparquet')
+    elif output_type == 'csv':
+        df.to_csv(os.path.join(filedir, filename), index=index)
 
 def flushResults(automl_obj, y):
     df = automl_obj.results[y].copy()
@@ -297,7 +298,8 @@ def ga_toolbox(automl_obj, y):
 
 def reduce_mem_usage(df, verbose=True):
     numerics = ['int16', 'int32', 'int64', 'float16', 'float32', 'float64']
-    start_mem = df.memory_usage().sum() / 1024**2    
+    start_mem = df.memory_usage().sum() / 1024**2
+    print('Original memory usage {:5.2f} Mb'.format(start_mem))
     for col in df.columns:
         col_type = df[col].dtypes
         if col_type in numerics:
@@ -456,8 +458,8 @@ class AutoML:
                  ) -> None:
         self.start_time = datetime.now()
         ProgressBar.enable()
-        ray.init(ignore_reinit_error=True)
         optimize_pandas()
+        ray.init(ignore_reinit_error=True)
 
         #initializing variables
         self.results = {}
@@ -639,24 +641,29 @@ class AutoML:
                     print('[' + y + ']   Features engineering - Features reduction after redudance test:'
                         , n_features_2str())
             
-        if flush_intermediate_steps and flush_transformed_ds_sample_frac > 0 and flush_transformed_ds_sample_frac <= 1:
-            #getting the set of columns to be flushed
-            col_names = set()
-            for y in self.y_colname_list:
-                col_names = col_names.union(set(self.X_train_map[y].columns))
-            
-            col_names = list(col_names)
-            #saving results in a csv file
-            n_rows = int(flush_transformed_ds_sample_frac*self.X.shape[0])
-            
-            trans_df = pd.concat([self.X[col_names].iloc[:n_rows].reset_index(drop=True)
-                                  , pd.DataFrame(self.y_full[:n_rows], columns=self.y_colname_list)]
-                                 , axis=1, ignore_index=True)
-            
-            col_names.extend(self.y_colname_list)
-            trans_df.columns = col_names
+            if flush_intermediate_steps and flush_transformed_ds_sample_frac > 0 and flush_transformed_ds_sample_frac <= 1:
+                #getting the set of columns to be flushed
+                #col_names = set()
+                #for y in self.y_colname_list:
+                #    col_names = col_names.union(set(self.X_train_map[y].columns))
+                
+                #col_names = list(col_names)
+                col_names = list(self.X_train_map[y].columns)
+                col_names.append(y)
+                #saving results in a csv file
+                #n_rows = int(flush_transformed_ds_sample_frac*self.X.shape[0])
+                
+                #trans_df = pd.concat([self.X[col_names].iloc[:n_rows].reset_index(drop=True)
+                #                    , pd.DataFrame(self.y_full[:n_rows], columns=self.y_colname_list)]
+                #                    , axis=1, ignore_index=True)
+                
+                #col_names.extend(self.y_colname_list)
+                #trans_df.columns = col_names
+                trans_df = pandas.DataFrame(columns=col_names)
 
-            _flush_intermediate_steps(trans_df, label_list=[self.ds_name, 'AFTER_FEATENG', int(flush_transformed_ds_sample_frac*100)])            
+                _flush_intermediate_steps(trans_df, label_list=[self.ds_name, 'AFTER_FEATENG', y
+                                                                , int(flush_transformed_ds_sample_frac*100)]
+                                          , output_type='csv')            
 
     def clearResults(self):
         self.results = {} #cleaning the previous results
@@ -868,7 +875,7 @@ if __name__ == '__main__':
     automl = AutoML('results/20220110_145100_VIATURAS_FASTTEST_SAMPLE_FRAC_100.gzip', ['y', 'y2']
     #automl = AutoML('datasets/multilple_y.csv', ['y', 'y2']
                     , flush_intermediate_steps = True
-                    , flush_transformed_ds_sample_frac=1
+                    , flush_transformed_ds_sample_frac=0.01
                     , ds_sample_frac = 1
                     , min_x_y_correlation_rate=0.005
                     , ngen=1
