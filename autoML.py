@@ -245,7 +245,7 @@ def evaluation(individual, automl_obj, y):
         if row_result[automl_obj.main_metric_map[y]] > best_score:
             best_score = row_result[automl_obj.main_metric_map[y]]
             
-        log_msg = '   *Model trained: ' + str(scoring_list[0]) 
+        log_msg = '\n*[' + y + '] Model trained: ' + str(scoring_list[0]) 
         log_msg += ' = {:.5f}'.format(row_result[automl_obj.main_metric_map[y]]) 
         log_msg += ' | ' + str(algo_instance)[:str(algo_instance).find('(')] 
         log_msg += ' | ' + str(len(col_tuple)) + ' features'
@@ -253,7 +253,7 @@ def evaluation(individual, automl_obj, y):
         params_str = params_str.replace("'n_jobs': -1,","").replace("  ", " ").replace("{ ", "{").replace(" }", "}")
         log_msg += ' | ' + params_str
 
-        print(log_msg[:150].replace('\n',''))#show only the 150 first caracteres
+        print(log_msg[:150])#show only the 150 first caracteres
  
     flushResults(automl_obj, y)
     return float2bigint(best_score) #main metric
@@ -441,6 +441,20 @@ def process_y(automlobj, y):
         _flush_intermediate_steps(trans_df, label_list=[automlobj.ds_name, 'AFTER_FEATENG', y]
                                     , output_type='csv')            
     return list(automlobj.X_train_map[y].columns)
+
+def parallel_process_fit(y, metrics, y_is_cat):
+    #dataframe format: ['algorithm', 'params', 'features', 'n_features', 'train_time', 'predict_time', 'mem_max', <metrics>]
+    columns_list_base = ['algorithm', 'params', 'features', 'n_features', 'train_time', 'predict_time', 'mem_max']
+    columns_list_base.extend(metrics)
+    if y_is_cat:
+        columns_list_base.append('confusion_matrix')
+
+    map_columns_list = {}
+    map_columns_list[y] = columns_list_base
+    
+    results_df = pandas.DataFrame(columns=columns_list_base)
+    
+    return (map_columns_list, results_df)
 class AutoML:
     ALGORITHMS = {
         #classifiers
@@ -732,86 +746,76 @@ class AutoML:
         return cls_str[cls_str.rfind('.')+1:cls_str.rfind("'")] 
 
     def __fit(self, buffer=True):
-        for y in self.y_colname_list:
-            self.__fit_one_y(y, buffer)
-        return self.results
-            
-    def __fit_one_y(self, y, buffer=True):
-        if buffer and y in self.results:
-            return self.results[y]
-                   
-        #else to get results
-        t0 = time.perf_counter()
-        
-        #dataframe format: ['algorithm', 'params', 'features', 'n_features', 'train_time', 'predict_time', 'mem_max', <metrics>]
-        columns_list = ['algorithm', 'params', 'features', 'n_features', 'train_time', 'predict_time', 'mem_max']
-        
-        columns_list.extend(self.getMetrics(y))
-        
-        y_is_cat = self.YisCategorical(y)
-        y_is_num = not y_is_cat
-        
-        if y_is_cat:
-            columns_list.append('confusion_matrix')
-        
-        self.results[y] = pandas.DataFrame(columns=columns_list)
-        del(columns_list)
-        
-        self.selected_algos_map[y] = []
-        
+
         def is_in_class_tree(cls1, cls2):
             #vide https://docs.python.org/3/library/inspect.html
             return cls1 in inspect.getmro(cls2)
-        
-        for algo in self.algorithms.keys():
-            if  ((y_is_cat and is_in_class_tree(RegressorMixin, algo)) #Y is incompatible with algorithm        
-                 or (y_is_num and is_in_class_tree(ClassifierMixin, algo))#Y is incompatible with algorithm
-            ):
-                continue
-            #else: all right
-            self.selected_algos_map[y].append(algo)
-        
-        print('Selected algorithms:', [self.__class2str(x) for x in self.selected_algos_map[y]])
-        
-        #setup the bitmap to genetic algorithm
-        self.n_bits_algos_map[y] = len(bautil.int2ba(len(self.selected_algos_map[y])-1))#TODO: analyze de number of bits to use
-        n_cols = self.X_train_map[y].shape[1] + self.n_bits_algos_map[y]
-        self.X_bitmap_map[y] = bitarray(n_cols)
-        self.X_bitmap_map[y].setall(1)
 
-        #main metric column
-        self.main_metric_map[y] = self.getMetrics(y)[0] #considering the first element the most important
-
-        #calculating the size of population (features x algorithms)
-        n_train_sets = 0
-        for k in range(1, self.X_train_map[y].shape[1] + 1):
-            n_train_sets += comb(self.X_train_map[y].shape[1] + 1, k, exact=False)
-            if math.isinf(n_train_sets):
-                break
-
-        print('[' + y + '] Nº of training possible basic combinations:'
-              , n_train_sets*len(self.selected_algos_map[y])
-              , '(' + str(n_train_sets),'features combinations,'
-              , str(len(self.selected_algos_map[y])) +' algorithms)')
-
-        #if math.isinf(n_train_sets):
-        #    n_train_sets = self.X_train_map[y].shape[1]
-        #n_train_sets = int(n_train_sets)        
+        t0 = time.perf_counter()
         
-        toolbox = ga_toolbox(self, y)
-        #running the GA algorithm
-        algorithms.eaSimple(toolbox.population(), toolbox, cxpb=0.8, mutpb=0.3, ngen=self.ngen, verbose=False)
-        #free GA memory
-        del(toolbox)
+        result_list = Parallel(n_jobs=-1, backend="multiprocessing")(delayed(parallel_process_fit)
+                                        (y, self.getMetrics(y), self.YisCategorical(y))
+                                        for y in self.y_colname_list)
         
-        #preparing the results
-        self.results[y].sort_values(by=[self.main_metric_map[y], 'predict_time'], ascending=[False,True], inplace=True)
-        self.results[y] = self.results[y].rename_axis('train_order').reset_index()        
+        columns_list_map = {}
+        for i, tuple_result in enumerate(result_list):
+            y = self.y_colname_list[i]
+            y_is_cat = self.YisCategorical(y)
+            y_is_num = not y_is_cat
+            
+            columns_list_map.update(tuple_result[0])
+            self.results[y] = tuple_result[1]
+            self.selected_algos_map[y] = []
+            for algo in self.algorithms.keys():
+                if  ((y_is_cat and is_in_class_tree(RegressorMixin, algo)) #Y is incompatible with algorithm        
+                    or (y_is_num and is_in_class_tree(ClassifierMixin, algo))#Y is incompatible with algorithm
+                ):
+                    continue
+                #else: all right
+                self.selected_algos_map[y].append(algo)
+            
+            print('[' + y + '] Selected algorithms:', [self.__class2str(x) for x in self.selected_algos_map[y]])
 
+            #setup the bitmap to genetic algorithm
+            self.n_bits_algos_map[y] = len(bautil.int2ba(len(self.selected_algos_map[y])-1))#TODO: analyze de number of bits to use
+            n_cols = self.X_train_map[y].shape[1] + self.n_bits_algos_map[y]
+            self.X_bitmap_map[y] = bitarray(n_cols)
+            self.X_bitmap_map[y].setall(1)
+
+            #main metric column
+            self.main_metric_map[y] = self.getMetrics(y)[0] #considering the first element the most important
+
+            #calculating the size of population (features x algorithms)
+            n_train_sets = 0
+            for k in range(1, self.X_train_map[y].shape[1] + 1):
+                n_train_sets += comb(self.X_train_map[y].shape[1] + 1, k, exact=False)
+                if math.isinf(n_train_sets):
+                    break
+
+            print('[' + y + '] Nº of training possible basic combinations:'
+                , n_train_sets*len(self.selected_algos_map[y])
+                , '(' + str(n_train_sets),'features combinations,'
+                , str(len(self.selected_algos_map[y])) +' algorithms)')
+
+        del(result_list)
+                
+        def ga_process_fit(y):                    
+            toolbox = ga_toolbox(self, y)
+            #running the GA algorithm
+            algorithms.eaSimple(toolbox.population(), toolbox, cxpb=0.8, mutpb=0.3, ngen=self.ngen, verbose=False)
+            #free GA memory
+            del(toolbox)
+            #preparing the results
+            self.results[y].sort_values(by=[self.main_metric_map[y], 'predict_time'], ascending=[False,True], inplace=True)
+            self.results[y] = self.results[y].rename_axis('train_order').reset_index()
+                
+        Parallel(n_jobs=-1, backend="threading")(delayed(ga_process_fit)
+                                                 (y)
+                                                 for y in self.y_colname_list)
+        
         print('Fit Time (GA):', int(time.perf_counter() - t0), 's')
-        
-        return self.results[y]
-    
+        return self.results
+
     def getMetrics(self, y):
         if self.YisCategorical(y):
             return self.metrics_classification_map[y]
@@ -888,7 +892,7 @@ if __name__ == '__main__':
                          , "p": [2, 3]
                          , "n_jobs": [-1]}
                         , XGBRFRegressor:{}}
-                    , features_engineering=True
+                    , features_engineering=False
                     , n_inter_bayessearch=3)
     print(automl.getResults())
     print(automl.getBestResult())
