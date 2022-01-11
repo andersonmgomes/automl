@@ -44,10 +44,11 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.exceptions import ConvergenceWarning
 from sklearn.feature_extraction import text
 from sklearn.feature_extraction.text import TfidfVectorizer
+from joblib import dump, load
 import logging
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 
-def _flush_intermediate_steps(df, label_list = [''], dth=datetime.now(), index=False, output_type='gzip'):
+def _flush_intermediate_steps(obj, label_list = [''], dth=datetime.now(), index=False, output_type='gzip'):
     #saving df in a csv file
     filename = dth.strftime("%Y%m%d_%H%M%S")
     
@@ -66,9 +67,11 @@ def _flush_intermediate_steps(df, label_list = [''], dth=datetime.now(), index=F
         os.mkdir(filedir)
 
     if output_type == 'gzip':
-        df.to_parquet(os.path.join(filedir, filename), index=index, compression='gzip', engine='fastparquet')
+        obj.to_parquet(os.path.join(filedir, filename), index=index, compression='gzip', engine='fastparquet')
     elif output_type == 'csv':
-        df.to_csv(os.path.join(filedir, filename), index=index)
+        obj.to_csv(os.path.join(filedir, filename), index=index)
+    elif output_type == 'joblib':
+        dump(obj, os.path.join(filedir, filename))
 
 def flushResults(automl_obj, y):
     df = automl_obj.results[y].copy()
@@ -77,6 +80,14 @@ def flushResults(automl_obj, y):
     df['features'] = df['features'].astype(str)
     df['confusion_matrix'] = df['confusion_matrix'].astype(str)
     _flush_intermediate_steps(df, ['RESULTS', automl_obj.ds_name, y], automl_obj.start_time)
+
+    #saving the best model
+    best_model = automl_obj.results[y]['algorithm'].iloc[0]
+    _flush_intermediate_steps(best_model, ['best_model', automl_obj.ds_name, y]
+                              , automl_obj.start_time, output_type='joblib')
+    
+    
+
 
 def features_corr_level_Y(i, X, y, threshold):
     #features engineering
