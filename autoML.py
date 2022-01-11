@@ -361,55 +361,41 @@ def __train_test_split(automlobj, y_col_name):
         
     return train_test_split(automlobj.X, y, train_size=0.8, test_size=0.2, random_state=automlobj.RANDOM_STATE, stratify=stratify)
 
-def process_y(automlobj, y):
+def parallel_process_y(automlobj, y):
+    y_encoder = None
+    y_full = None
+    y_classes = None
+
     if automlobj.YisCategorical(y):
         print('[' + y + '] ML problem type: Classification')
         #encoding
-        automlobj.y_encoder_map[y] = OrdinalEncoder(dtype=int)
-        automlobj.y_full[y] = pd.DataFrame(automlobj.y_encoder_map[y].fit_transform(np.asanyarray(automlobj.y_full[y]).reshape(-1, 1)), columns=[y])
-
-        automlobj.y_classes_map[y] = np.sort(automlobj.y_full[y].unique())
-        automlobj.y_is_binary_map[y] = len(automlobj.y_classes_map[y]) == 2
-
-        if not automlobj.y_is_binary_map[y]: #multiclass 
-            #adjusting the metrics for multiclass target
-            for j, m in enumerate(automlobj.metrics_classification_map[y]):
-                if m == 'f1':
-                    automlobj.metrics_classification_map[y][j] = 'f1_weighted'
-                elif m == 'roc_auc':
-                    automlobj.metrics_classification_map[y][j] = 'roc_auc_ovr_weighted'
-                elif m == 'accuracy':
-                    automlobj.metrics_classification_map[y][j] = 'balanced_accuracy'
-                elif m == 'recall':
-                    automlobj.metrics_classification_map[y][j] = 'recall_weighted'
-                elif m == 'precision':
-                    automlobj.metrics_classification_map[y][j] = 'precision_weighted'
-
+        y_encoder = OrdinalEncoder(dtype=int)
+        y_full = pd.DataFrame(y_encoder.fit_transform(np.asanyarray(automlobj.y_full[y]).reshape(-1, 1)), columns=[y])
+        y_classes = np.sort(automlobj.y_full[y].unique())
     else:
         print('[' + y + '] ML problem type: Regression')
 
-    print('[' + y + ']    Applied metrics:', automlobj.metrics_classification_map[y])
     #splitting dataset
     print('[' + y + ']    Splitting dataset...')
-    automlobj.X_train_map[y], automlobj.X_test_map[y], automlobj.y_train_map[y], automlobj.y_test_map[y] = __train_test_split(automlobj, y)
-    print('[' + y + ']   X_train dimensions:', automlobj.X_train_map[y].shape)
-    print('[' + y + ']   y_train dimensions:', automlobj.y_train_map[y].shape)
-    automlobj.y_train_map[y] = np.asanyarray(automlobj.y_train_map[y]).reshape(-1, 1).ravel()
-    automlobj.y_test_map[y] = np.asanyarray(automlobj.y_test_map[y]).reshape(-1, 1).ravel()
+    X_train, X_test, y_train, y_test = __train_test_split(automlobj, y)
+    print('[' + y + ']   X_train dimensions:', X_train.shape)
+    print('[' + y + ']   y_train dimensions:', y_train.shape)
+    y_train = np.asanyarray(y_train).reshape(-1, 1).ravel()
+    y_test = np.asanyarray(y_test).reshape(-1, 1).ravel()
 
     #running feature engineering in parallel
     if automlobj.features_engineering:
-        n_cols = automlobj.X_train_map[y].shape[1]
+        n_cols = X_train.shape[1]
         print('[' + y + '] Features engineering - Testing correlation with Y...')
-        considered_features = Parallel(n_jobs=-1, backend="multiprocessing")(delayed(features_corr_level_Y)
+        considered_features = Parallel(n_jobs=-1, backend="threading")(delayed(features_corr_level_Y)
                                 (j
-                                , automlobj.X_train_map[y].iloc[:,j]#._to_pandas()
-                                , automlobj.y_train_map[y]
+                                , X_train.iloc[:,j]#._to_pandas()
+                                , y_train
                                 , automlobj.min_x_y_correlation_rate)
                                 for j in range(0, n_cols))
         considered_features = [x for x in considered_features if x is not None]
-        automlobj.X_train_map[y] = automlobj.X_train_map[y].iloc[:,considered_features]
-        automlobj.X_test_map[y] = automlobj.X_test_map[y].iloc[:,considered_features]
+        X_train = X_train.iloc[:,considered_features]
+        X_test = X_test.iloc[:,considered_features]
         
         def n_features_2str():
             return "{:.2f}".format(100*(1-len(considered_features)/automlobj.X.shape[1])) + "% (" + str(len(considered_features)) + " remained)"
@@ -420,27 +406,28 @@ def process_y(automlobj, y):
         if automlobj.do_redundance_test_X:
             print('[' + y + '] Features engineering - Testing redudance between features...')    
             
-            n_cols = automlobj.X_train_map[y].shape[1]
-            considered_features = Parallel(n_jobs=-1, backend="multiprocessing")(delayed(features_corr_level_X)
+            n_cols = X_train.shape[1]
+            considered_features = Parallel(n_jobs=-1, backend="threading")(delayed(features_corr_level_X)
                                     (j
-                                    , automlobj.X_train_map[y].iloc[:,j]#._to_pandas()
-                                    , automlobj.X_train_map[y].iloc[:,j+1:]#._to_pandas()
+                                    , X_train.iloc[:,j]#._to_pandas()
+                                    , X_train.iloc[:,j+1:]#._to_pandas()
                                     , (1-automlobj.min_x_y_correlation_rate))
                                     for j in range(0, n_cols-1))
 
             considered_features = [x for x in considered_features if x is not None]
-            automlobj.X_train_map[y] = automlobj.X_train_map[y].iloc[:,considered_features]
-            automlobj.X_test_map[y] = automlobj.X_test_map[y].iloc[:,considered_features]
+            X_train = X_train.iloc[:,considered_features]
+            X_test = X_test.iloc[:,considered_features]
             
             print('[' + y + ']   Features engineering - Features reduction after redudance test:'
                 , n_features_2str())
     
     if automlobj.flush_intermediate_steps:
-        col_names = list(automlobj.X_train_map[y].columns)
+        col_names = list(X_train.columns)
         trans_df = pandas.DataFrame(columns=col_names)
         _flush_intermediate_steps(trans_df, label_list=[automlobj.ds_name, 'AFTER_FEATENG', y]
                                     , output_type='csv')            
-    return list(automlobj.X_train_map[y].columns)
+    return (y, list(X_train.columns), y_encoder, y_full
+            , y_classes, X_train, X_test, y_train, y_test)
 
 def parallel_process_fit(y, metrics, y_is_cat):
     #dataframe format: ['algorithm', 'params', 'features', 'n_features', 'train_time', 'predict_time', 'mem_max', <metrics>]
@@ -454,7 +441,7 @@ def parallel_process_fit(y, metrics, y_is_cat):
     
     results_df = pandas.DataFrame(columns=columns_list_base)
     
-    return (map_columns_list, results_df)
+    return (y, map_columns_list, results_df)
 class AutoML:
     ALGORITHMS = {
         #classifiers
@@ -651,7 +638,6 @@ class AutoML:
         #initializing control maps
         self.y_full = ds[self.y_colname_list]
         self.y_encoder_map = {}
-        self.y_is_binary_map = {}
         self.y_classes_map = {}
         self.X_train_map = {}
         self.X_test_map = {}
@@ -668,9 +654,38 @@ class AutoML:
                 self.metrics_classification_map[y] = ['f1', 'accuracy', 'roc_auc']
         #metrics reference: https://scikit-learn.org/stable/modules/model_evaluation.html
 
-        selected_features = Parallel(n_jobs=-1, require='sharedmem')(delayed(process_y)
+        result_list = Parallel(n_jobs=-1, backend='multiprocessing')(delayed(parallel_process_y) 
                                 (self, y)
                                 for y in self.y_colname_list)
+            
+        selected_features = []
+        for tuple_result in result_list:
+            y = tuple_result[0]
+            selected_features.append(tuple_result[1])
+            self.y_encoder_map[y] = tuple_result[2]
+            self.y_full[y] = tuple_result[3]
+            self.y_classes_map[y] = tuple_result[4]
+            if self.YisCategorical(y) and len(self.y_classes_map[y]) == 2: #binary classification
+                #adjusting the metrics for multiclass target
+                for j, m in enumerate(self.metrics_classification_map[y]):
+                    if m == 'f1':
+                        self.metrics_classification_map[y][j] = 'f1_weighted'
+                    elif m == 'roc_auc':
+                        self.metrics_classification_map[y][j] = 'roc_auc_ovr_weighted'
+                    elif m == 'accuracy':
+                        self.metrics_classification_map[y][j] = 'balanced_accuracy'
+                    elif m == 'recall':
+                        self.metrics_classification_map[y][j] = 'recall_weighted'
+                    elif m == 'precision':
+                        self.metrics_classification_map[y][j] = 'precision_weighted'
+            print('[' + y + ']    Applied metrics:', self.metrics_classification_map[y])
+            #X_train, X_test, y_train, y_test
+            self.X_train_map[y] = tuple_result[5]
+            self.X_test_map[y] = tuple_result[6]
+            self.y_train_map[y] = tuple_result[7]
+            self.y_test_map[y] = tuple_result[8]
+            
+            
             
         if self.flush_intermediate_steps:
             features_set = set()
@@ -758,13 +773,13 @@ class AutoML:
                                         for y in self.y_colname_list)
         
         columns_list_map = {}
-        for i, tuple_result in enumerate(result_list):
-            y = self.y_colname_list[i]
+        for tuple_result in result_list:
+            y = tuple_result[0]
             y_is_cat = self.YisCategorical(y)
             y_is_num = not y_is_cat
             
-            columns_list_map.update(tuple_result[0])
-            self.results[y] = tuple_result[1]
+            columns_list_map.update(tuple_result[1])
+            self.results[y] = tuple_result[2]
             self.selected_algos_map[y] = []
             for algo in self.algorithms.keys():
                 if  ((y_is_cat and is_in_class_tree(RegressorMixin, algo)) #Y is incompatible with algorithm        
@@ -841,10 +856,6 @@ class AutoML:
     def YisContinuous(self, y) -> bool:
         return not self.YisCategorical(y)
     
-    def __del__(self):
-        ray.shutdown()
-    
-                   
 
 #utilitary methods
 
@@ -892,7 +903,8 @@ if __name__ == '__main__':
                          , "p": [2, 3]
                          , "n_jobs": [-1]}
                         , XGBRFRegressor:{}}
-                    , features_engineering=False
+                    , features_engineering=True
+                    , do_redundance_test_X=True
                     , n_inter_bayessearch=3)
     print(automl.getResults())
     print(automl.getBestResult())
