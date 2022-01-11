@@ -42,6 +42,8 @@ from xgboost import XGBClassifier, XGBRegressor, XGBRFRegressor
 import os
 from sklearn.neural_network import MLPClassifier
 from sklearn.exceptions import ConvergenceWarning
+from sklearn.feature_extraction import text
+from sklearn.feature_extraction.text import TfidfVectorizer
 import logging
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 
@@ -310,7 +312,11 @@ def reduce_mem_usage(df, verbose=True):
             c_max = df[col].max()
             if str(col_type)[:3] == 'int':
                 if c_min > np.iinfo(np.int8).min and c_max < np.iinfo(np.int8).max:
-                    df[col] = df[col].astype(np.int8)
+                    #test if is boolean
+                    if df[col].unique().shape[0] == 2:
+                        df[col] = df[col].astype(bool)
+                    else:
+                        df[col] = df[col].astype(np.int8)
                 elif c_min > np.iinfo(np.int16).min and c_max < np.iinfo(np.int16).max:
                     df[col] = df[col].astype(np.int16)
                 elif c_min > np.iinfo(np.int32).min and c_max < np.iinfo(np.int32).max:
@@ -319,7 +325,15 @@ def reduce_mem_usage(df, verbose=True):
                     df[col] = df[col].astype(np.int64)  
             else:
                 if c_min > np.finfo(np.float16).min and c_max < np.finfo(np.float16).max:
-                    df[col] = df[col].astype(np.float16)
+                    #test if is integer
+                    if c_min>=0 and c_max<=1:
+                        #test if is boolean
+                        if df[col].dropna().unique().shape[0] == 2:
+                            df[col] = df[col].astype(bool)
+                        else:
+                            df[col] = df[col].astype(np.int8)
+                    else:                        
+                        df[col] = df[col].astype(np.float16)
                 elif c_min > np.finfo(np.float32).min and c_max < np.finfo(np.float32).max:
                     df[col] = df[col].astype(np.float32)
                 else:
@@ -365,15 +379,17 @@ def __train_test_split(automlobj, y_col_name):
 
 def parallel_process_y(automlobj, y):
     y_encoder = None
-    y_full = None
+    y_full = automlobj.y_full[y]
     y_classes = None
 
     if automlobj.YisCategorical(y):
         logging.info('[' + y + '] ML problem type: Classification')
-        #encoding
-        y_encoder = OrdinalEncoder(dtype=int)
-        y_full = pd.DataFrame(y_encoder.fit_transform(np.asanyarray(automlobj.y_full[y]).reshape(-1, 1)), columns=[y])
         y_classes = np.sort(automlobj.y_full[y].unique())
+        if y_full.dtype == 'object':
+            #encoding
+            y_encoder = OrdinalEncoder(dtype=int)
+            y_full = pd.DataFrame(y_encoder.fit_transform(np.asanyarray(automlobj.y_full[y]).reshape(-1, 1)), columns=[y])
+            y_full = reduce_mem_usage(y_full, verbose=False)
     else:
         logging.info('[' + y + '] ML problem type: Regression')
 
@@ -442,6 +458,18 @@ def parallel_process_fit(y, metrics, y_is_cat):
     results_df = pandas.DataFrame(columns=columns_list_base)
     
     return (y, map_columns_list, results_df)
+
+def parallel_tfidf(col_name, X_i):
+    my_stop_words = text.ENGLISH_STOP_WORDS#.union(["book"])
+    vectorizer = TfidfVectorizer(ngram_range=(1,4), max_features=750
+                                , stop_words=my_stop_words
+                                , strip_accents='ascii'
+                                , max_df=0.9, min_df=0.01)
+    X_tfidf = vectorizer.fit_transform(X_i)
+    X_tfidf = pd.DataFrame(X_tfidf.toarray(), columns=vectorizer.get_feature_names_out())
+    X_tfidf = X_tfidf.add_prefix(col_name + '_')
+    
+    return (col_name, X_tfidf, vectorizer)
 class AutoML:
     ALGORITHMS = {
         #classifiers
@@ -602,42 +630,6 @@ class AutoML:
         if type(self.y_colname_list) == str:
             self.y_colname_list = [self.y_colname_list]
 
-        #setting X
-        self.X = ds.drop(self.y_colname_list, axis=1)
-        self.__onehot_encoder = OneHotEncoder(sparse=False, dtype=int)
-        hot_columns = []
-        str_columns = []
-        for i, col in enumerate(self.X.columns):
-            if self.X.dtypes[i] == object: 
-                if len(self.X[col].unique()) <= self.__unique_categoric_limit:
-                    hot_columns.append(col)
-                else:
-                   str_columns.append(col)
-        
-        if len(str_columns) > 0:
-            self.X = self.X.drop(str_columns, axis=1)
-            
-        if len(hot_columns) > 0:
-            logging.info('One hot encoder columns: ' +str(hot_columns))
-            self.__onehot_encoder.fit(self.X[hot_columns])
-            
-            hot_cols_names = []
-            
-            for i, name in enumerate(self.__onehot_encoder.feature_names_in_):
-                for cat in self.__onehot_encoder.categories_[i]:
-                    hot_cols_names.append(name + '_' + cat.lower().replace(' ','_'))
-                    
-            self.X = pd.concat([self.X.drop(hot_columns, axis=1)
-                                , pd.DataFrame(self.__onehot_encoder.transform(self.X[hot_columns])
-                                            , columns=hot_cols_names)], axis=1)
-            if flush_intermediate_steps:
-                _flush_intermediate_steps(ds, [self.ds_name, 'ONE_HOT_ENC', len(hot_columns)])
-            
-        #normalizing the variables
-        logging.info('Normalizing the variables...')
-        self.scaler = preprocessing.MinMaxScaler()
-        self.X = pd.DataFrame(self.scaler.fit_transform(self.X), columns=self.X.columns) 
-
         #initializing control maps
         self.y_full = ds[self.y_colname_list]
         self.y_encoder_map = {}
@@ -646,6 +638,64 @@ class AutoML:
         self.X_test_map = {}
         self.y_train_map = {}
         self.y_test_map = {}
+
+        #setting X
+        self.X = ds.drop(self.y_colname_list, axis=1)
+        del(ds)
+        self.__onehot_encoder = OneHotEncoder(sparse=False, dtype=int)
+        self.hot_columns = []
+        self.str_columns = []
+        for i, col in enumerate(self.X.columns):
+            if self.X.dtypes[i] == object: 
+                if len(self.X[col].unique()) <= self.__unique_categoric_limit:
+                    self.hot_columns.append(col)
+                else:
+                   self.str_columns.append(col)
+        
+        self.tfidf_vectorizers_map = {}
+        
+        if len(self.str_columns) > 0:
+            #do tfidf
+            result_list = Parallel(n_jobs=-1, backend='multiprocessing')(delayed(parallel_tfidf) 
+                                    (col_name, self.X[col_name])
+                                    for col_name in self.str_columns)
+            for result in result_list:
+                self.tfidf_vectorizers_map[result[0]] = result[2]
+                self.X = pd.concat([self.X.reset_index(drop=True), result[1]], axis=1)    
+                
+            self.X = self.X.drop(self.str_columns, axis=1)
+            logging.info('X dimensions after Tfidf: ' + str(self.X.shape))
+            
+            
+        if len(self.hot_columns) > 0:
+            logging.info('One hot encoder columns: ' +str(self.hot_columns))
+            self.__onehot_encoder.fit(self.X[self.hot_columns])
+            
+            hot_cols_names = []
+            
+            for i, name in enumerate(self.__onehot_encoder.feature_names_in_):
+                for cat in self.__onehot_encoder.categories_[i]:
+                    hot_cols_names.append(name + '_' + cat.lower().replace(' ','_'))
+            temp_df = self.__onehot_encoder.transform(self.X[self.hot_columns])
+            temp_df = pd.DataFrame(temp_df , columns=hot_cols_names)        
+            self.X = pd.concat([self.X.reset_index(drop=True), temp_df], axis=1)
+            self.X = self.X.drop(self.hot_columns, axis=1)
+            del(temp_df)
+            logging.info('X dimensions after One hot encoder: ' + str(self.X.shape))
+
+                
+        #normalizing the variables
+        logging.info('Normalizing the variables...')
+        self.scaler = preprocessing.MinMaxScaler()
+        self.X = pd.DataFrame(self.scaler.fit_transform(self.X), columns=self.X.columns) 
+
+        logging.info('Optimizing the dataset X after Normalization:')
+        self.X = reduce_mem_usage(self.X)
+        logging.info('X dimensions after Normalization: ' + str(self.X.shape))
+
+        if flush_intermediate_steps:
+            _flush_intermediate_steps(pd.concat([self.X.reset_index(drop=True), self.y_full.reset_index(drop=True)], axis=1)
+                                        , [self.ds_name, 'NORMAL'])
 
         self.metrics_regression_map = metrics
         self.metrics_classification_map = metrics
@@ -842,17 +892,15 @@ class AutoML:
         return type(self.y_full.iloc[0,0])
     
     def YisCategorical(self, col_name) -> bool:
-        y_type = type(self.y_full[col_name].iloc[0])
-        
+        y_type = self.y_full[col_name].dtypes
+
         if (y_type == np.bool_
             or y_type == np.str_):
             return True
         #else
-        if ((y_type == np.float_)
-            or (len(self.y_full[col_name].unique()) > self.__unique_categoric_limit)):
-            return False
-        #else
-        return True    
+        return (str(y_type)[:3] == 'int'
+                and len(self.y_full[col_name].unique()) <= self.__unique_categoric_limit
+                )
     
     def YisContinuous(self, y) -> bool:
         return not self.YisCategorical(y)
@@ -892,10 +940,11 @@ if __name__ == '__main__':
     #ds_test_multiple_y.to_csv('datasets/multilple_y.csv', index=False)
     #logging.info(ds_test_multiple_y)
     #exit()    
-    automl = AutoML('results/20220110_145100_VIATURAS_FASTTEST_SAMPLE_FRAC_100.gzip', ['y', 'y2']
+    #automl = AutoML('results/20220110_145100_VIATURAS_FASTTEST_SAMPLE_FRAC_100.gzip', ['y', 'y2']
     #automl = AutoML('datasets/multilple_y.csv', ['y', 'y2']
+    automl = AutoML('datasets/viaturas.csv', 'com_problema'
                     , flush_intermediate_steps = True
-                    , ds_sample_frac = 1
+                    , ds_sample_frac = 0.01
                     , min_x_y_correlation_rate=0.005
                     , ngen=1
                     , ds_name='viaturas_fast'
@@ -903,7 +952,7 @@ if __name__ == '__main__':
                         {"n_neighbors": [3,5,7]
                          , "p": [2, 3]
                          , "n_jobs": [-1]}
-                        , XGBRFRegressor:{}}
+                        }
                     , features_engineering=True
                     , do_redundance_test_X=True
                     , n_inter_bayessearch=3)
