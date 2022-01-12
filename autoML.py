@@ -213,7 +213,7 @@ def evaluation(individual, automl_obj, y):
 
     def fit_score():
         estimator = algo_instance.set_params(**params)
-        row = {'algorithm': estimator.__class__
+        row = {'algorithm': estimator#.__class__
                , 'params': params
                , 'features': col_tuple
                , 'n_features': len(col_tuple)
@@ -485,8 +485,11 @@ def parallel_tfidf(col_name, X_i):
                                 , stop_words=my_stop_words
                                 , strip_accents='ascii'
                                 , max_df=0.9, min_df=0.01)
+    
     X_tfidf = vectorizer.fit_transform(X_i)
-    X_tfidf = pd.DataFrame(X_tfidf.toarray(), columns=vectorizer.get_feature_names_out())
+    
+    X_tfidf = pd.DataFrame(X_tfidf.toarray())
+    X_tfidf.columns = vectorizer.get_feature_names_out(X_tfidf.columns)
     X_tfidf = X_tfidf.add_prefix(col_name + '_')
     
     return (col_name, X_tfidf, vectorizer)
@@ -915,6 +918,8 @@ class AutoML:
     def YisContinuous(self, y) -> bool:
         return not self.YisCategorical(y)
     
+    def getFeaturesNames(self, y):
+        return self.X_train_map[y].columns    
 
 #utilitary methods
 
