@@ -49,7 +49,9 @@ import sys
 import logging
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 
-def _flush_intermediate_steps(obj, label_list = [''], dth=datetime.now(), index=False, output_type='gzip', overwrite=True):
+def _flush_intermediate_steps(obj, label_list = [''], dth=None, index=False, output_type='gzip', overwrite=True):
+    if dth is None:
+        dth = datetime.now()
     #saving df in a csv file
     filename = dth.strftime("%Y%m%d_%H%M%S")
     
@@ -80,7 +82,19 @@ def _flush_intermediate_steps(obj, label_list = [''], dth=datetime.now(), index=
         dump(obj, file_path)
     sys.stdout.flush()
 
+best_results = {} #TODO: relocate to a better place
+
 def flushResults(automl_obj, y):
+    global best_results
+    
+    def processing_test_datasets():
+        for file, df_test in automl_obj.test_df_map.items():
+            df_predict = pd.DataFrame(columns=best_results.keys())
+            for y, result in best_results.items():
+                df_predict[y] = result['algorithm'].predict(df_test[automl_obj.getFeaturesNames(y)])
+            _flush_intermediate_steps(df_predict, ['predict', automl_obj.ds_name, file]
+                                    , output_type='csv', overwrite=True, dth=automl_obj.start_time)
+
     df = automl_obj.results[y].copy()
     #convert object to string
     df['algorithm'] = df['algorithm'].astype(str)
@@ -95,41 +109,13 @@ def flushResults(automl_obj, y):
     best_model = best_row['algorithm']
     main_metric_value = best_row[automl_obj.main_metric_map[y]]
     main_metric_value = int(10000*main_metric_value) #to avoid 0 and generate a unique filename
-    _flush_intermediate_steps(best_model, ['best_model', automl_obj.ds_name, y, main_metric_value]
-                              , output_type='joblib', dth=automl_obj.start_time, overwrite=False)
-    #processing batch test datasets
-    processing_test_datasets(automl_obj, y, best_model)
-    
-def processing_test_datasets(automl_obj, y, model):
-    #analysing the results
-    import os
-    test_path = os.path.abspath('./to_process') #process directory
-    if os.path.exists(test_path):
-        for file in os.listdir(test_path):
-            if file.endswith('.csv'):
-                file_path = os.path.join(test_path, file)
-                df_test = pd.read_csv(file_path)
-                df_test.drop(columns=automl_obj.y_colname_list, inplace=True)
-                for col in df_test.columns:
-                    if col in automl_obj.str_columns:
-                        tfidf_vect = automl_obj.tfidf_vectorizers_map[col]
-                        X_tfidf = tfidf_vect.transform(df_test[col])
-                        X_tfidf = pd.DataFrame(X_tfidf.toarray())
-                        X_tfidf.columns = tfidf_vect.get_feature_names_out(X_tfidf.columns)
-                        X_tfidf = X_tfidf.add_prefix(col + '_')
-                        df_test = pd.concat([df_test.reset_index(drop=True), X_tfidf.reset_index(drop=True)], axis=1)
-                        df_test = df_test[automl_obj.getFeaturesNames(y)]
-                    elif col in automl_obj.hot_columns:
-                        continue #TODO
-                    elif col not in automl_obj.getFeaturesNames(y):
-                        df_test = df_test.drop(columns=[col], inplace=True)
-                                                
-                df_predict = model.predict(df_test)
-                df_predict = pd.DataFrame(df_predict)
-                _flush_intermediate_steps(df_predict, ['predict', automl_obj.ds_name, y, file]
-                                        , output_type='csv', overwrite=False)
-                        
-                
+    _flush_intermediate_steps(best_model, ['best_model', automl_obj.ds_name, y]
+                              , output_type='joblib', dth=automl_obj.start_time, overwrite=True)
+
+    if y not in best_results or best_results[y][automl_obj.main_metric_map[y]] < main_metric_value:
+        best_results[y] = best_row
+        #processing batch test datasets
+        processing_test_datasets()
     
 def features_corr_level_Y(i, X, y, threshold):
     #features engineering
@@ -617,7 +603,6 @@ def default_algorithms(n_jobs):
         GradientBoostingRegressor:{},    
     }    
     
-
 class AutoML:
     def __init__(self, ds_source, y_colname = 'y'
                  , algorithms = None
@@ -811,6 +796,30 @@ class AutoML:
             selfeat_df = pandas.DataFrame(columns=list(selected_features))
             _flush_intermediate_steps(selfeat_df, label_list=[self.ds_name, 'SELECTED_FEATURES']
                                         , output_type='csv')            
+            
+        #loading test files
+        self.test_df_map = {}
+        test_path = os.path.abspath('./to_process') #process directory
+        if os.path.exists(test_path):
+            for file in os.listdir(test_path):
+                if file.endswith('.csv'):
+                    file_path = os.path.join(test_path, file)
+                    df_test = pd.read_csv(file_path)
+                    df_test.drop(columns=self.y_colname_list, inplace=True)
+                    if df_test is not None: #TODO: check why df_test is None in some cases
+                        for col in df_test.columns:
+                            if col in self.str_columns:
+                                tfidf_vect = self.tfidf_vectorizers_map[col]
+                                X_tfidf = tfidf_vect.transform(df_test[col])
+                                X_tfidf = pd.DataFrame(X_tfidf.toarray())
+                                X_tfidf.columns = tfidf_vect.get_feature_names_out(X_tfidf.columns)
+                                X_tfidf = X_tfidf.add_prefix(col + '_')
+                                df_test = pd.concat([df_test.reset_index(drop=True), X_tfidf.reset_index(drop=True)], axis=1)
+                            elif col in self.hot_columns:
+                                continue #TODO
+                            elif col not in self.getFeaturesNames(y):
+                                df_test = df_test.drop(columns=[col], inplace=True)
+                        self.test_df_map[str(file).replace('.csv', '')] = reduce_mem_usage(df_test)
 
     def clearResults(self):
         self.results = {} #cleaning the previous results
