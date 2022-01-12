@@ -97,7 +97,40 @@ def flushResults(automl_obj, y):
     main_metric_value = int(10000*main_metric_value) #to avoid 0 and generate a unique filename
     _flush_intermediate_steps(best_model, ['best_model', automl_obj.ds_name, y, main_metric_value]
                               , output_type='joblib', dth=automl_obj.start_time, overwrite=False)
-
+    #processing batch test datasets
+    processing_test_datasets(automl_obj, y, best_model)
+    
+def processing_test_datasets(automl_obj, y, model):
+    #analysing the results
+    import os
+    test_path = os.path.abspath('./to_process') #process directory
+    if os.path.exists(test_path):
+        for file in os.listdir(test_path):
+            if file.endswith('.csv'):
+                file_path = os.path.join(test_path, file)
+                df_test = pd.read_csv(file_path)
+                df_test.drop(columns=automl_obj.y_colname_list, inplace=True)
+                for col in df_test.columns:
+                    if col in automl_obj.str_columns:
+                        tfidf_vect = automl_obj.tfidf_vectorizers_map[col]
+                        X_tfidf = tfidf_vect.transform(df_test[col])
+                        X_tfidf = pd.DataFrame(X_tfidf.toarray())
+                        X_tfidf.columns = tfidf_vect.get_feature_names_out(X_tfidf.columns)
+                        X_tfidf = X_tfidf.add_prefix(col + '_')
+                        df_test = pd.concat([df_test.reset_index(drop=True), X_tfidf.reset_index(drop=True)], axis=1)
+                        df_test = df_test[automl_obj.getFeaturesNames(y)]
+                    elif col in automl_obj.hot_columns:
+                        continue #TODO
+                    elif col not in automl_obj.getFeaturesNames(y):
+                        df_test = df_test.drop(columns=[col], inplace=True)
+                                                
+                df_predict = model.predict(df_test)
+                df_predict = pd.DataFrame(df_predict)
+                _flush_intermediate_steps(df_predict, ['predict', automl_obj.ds_name, y, file]
+                                        , output_type='csv', overwrite=False)
+                        
+                
+    
 def features_corr_level_Y(i, X, y, threshold):
     #features engineering
     #testing correlation between X and Y
@@ -200,14 +233,14 @@ def evaluation(individual, automl_obj, y):
                                , param_grid=automl_obj.algorithms[algo_instance.__class__]
                                , scoring=automl_obj.main_metric_map[y]
                                , cv=5
-                               , verbose=0, n_jobs=-3
+                               , verbose=0, n_jobs=automl_obj.n_jobs
                                )
         else:
             opt = BayesSearchCV(estimator=algo_instance
                                 , search_spaces=automl_obj.algorithms[algo_instance.__class__]
                                 , scoring=automl_obj.main_metric_map[y]
                                 , n_iter=automl_obj.n_inter_bayessearch, cv=5
-                                , verbose=0, n_jobs=-3, random_state=automl_obj.RANDOM_STATE
+                                , verbose=0, n_jobs=automl_obj.n_jobs, random_state=automl_obj.RANDOM_STATE
                                 )
         opt.fit(X_train2, automl_obj.y_train_map[y])
 
@@ -425,7 +458,7 @@ def parallel_process_y(automlobj, y):
     if automlobj.features_engineering:
         n_cols = X_train.shape[1]
         logging.info('[' + y + '] Features engineering - Testing correlation with Y...')
-        considered_features = Parallel(n_jobs=-3, backend="threading")(delayed(features_corr_level_Y)
+        considered_features = Parallel(n_jobs=automlobj.n_jobs, backend="threading")(delayed(features_corr_level_Y)
                                 (j
                                 , X_train.iloc[:,j]#._to_pandas()
                                 , y_train
@@ -444,7 +477,7 @@ def parallel_process_y(automlobj, y):
             logging.info('[' + y + '] Features engineering - Testing redudance between features...')    
             
             n_cols = X_train.shape[1]
-            considered_features = Parallel(n_jobs=-3, backend="threading")(delayed(features_corr_level_X)
+            considered_features = Parallel(n_jobs=automlobj.n_jobs, backend="threading")(delayed(features_corr_level_X)
                                     (j
                                     , X_train.iloc[:,j]#._to_pandas()
                                     , X_train.iloc[:,j+1:]#._to_pandas()
@@ -493,14 +526,15 @@ def parallel_tfidf(col_name, X_i):
     X_tfidf = X_tfidf.add_prefix(col_name + '_')
     
     return (col_name, X_tfidf, vectorizer)
-class AutoML:
-    ALGORITHMS = {
+
+def default_algorithms(n_jobs):
+    return {
         #classifiers
         #https://scikit-learn.org/stable/auto_examples/classification/plot_classifier_comparison.html
         KNeighborsClassifier: 
             {"n_neighbors": [3,5,7,9,11,13,15,17],
              "p": [2, 3],
-             "n_jobs": [-1],
+             "n_jobs": [n_jobs],
              },
         SVC:
             {"C": [0.001, 0.01, 0.1, 1, 10, 100, 1000],
@@ -510,7 +544,7 @@ class AutoML:
         GaussianProcessClassifier:{
             "copy_X_train": [False],
             "warm_start": [True, False],
-            "n_jobs": [-1],},
+            "n_jobs": [n_jobs],},
         DecisionTreeClassifier:{
             "criterion": ["gini", "entropy"],
             },
@@ -520,7 +554,7 @@ class AutoML:
             "min_samples_split": [2, 5, 10, 15, 100],
             "min_samples_leaf": [1, 2, 5, 10],
             "max_features": [None, "sqrt", "log2"],
-            "n_jobs": [-1],
+            "n_jobs": [n_jobs],
             },
         MLPClassifier:{
             "learning_rate": ['constant', 'invscaling', 'adaptive'], 
@@ -556,23 +590,23 @@ class AutoML:
         HistGradientBoostingClassifier:{
             "warm_start": [True, False],
             },
-        #TPOTClassifier(verbosity=0, n_jobs=-3):{},
+        #TPOTClassifier(verbosity=0, n_jobs=self.n_jobs):{},
         linear_model.LinearRegression:{
             "fit_intercept": [True, False],
-            "n_jobs": [-1],
+            "n_jobs": [n_jobs],
             },
         linear_model.LogisticRegression:{
             "C": [0.001, 0.01, 0.1, 1, 10,
                   100, 1000],
-            "n_jobs": [-1],
+            "n_jobs": [n_jobs],
             },
         VotingClassifier:{
             "voting": ["soft"],
-            "n_jobs": [-1],
+            "n_jobs": [n_jobs],
             },
         StackingClassifier:{
             "stack_method": ["auto"],
-            "n_jobs": [-1],
+            "n_jobs": [n_jobs],
             },
         #regressors        
         XGBRegressor:{},
@@ -583,8 +617,10 @@ class AutoML:
         GradientBoostingRegressor:{},    
     }    
     
+
+class AutoML:
     def __init__(self, ds_source, y_colname = 'y'
-                 , algorithms = ALGORITHMS
+                 , algorithms = None
                  , unique_categoric_limit = 10 
                  , min_x_y_correlation_rate = 0.01
                  , pool = None
@@ -599,6 +635,7 @@ class AutoML:
                  , flush_intermediate_steps = False
                  , ds_sample_frac = 1
                  , do_redundance_test_X = False
+                 , n_jobs = 1
                  ) -> None:
         self.start_time = datetime.now()
 
@@ -612,6 +649,8 @@ class AutoML:
         #initializing variables
         self.results = {}
         self.algorithms = algorithms
+        if algorithms is None:
+            self.algorithms = default_algorithms(n_jobs)
         self.__unique_categoric_limit = unique_categoric_limit
         self.min_x_y_correlation_rate = min_x_y_correlation_rate #TODO: #1 MIN_X_Y_CORRELATION_RATE: define this value dynamically
         self.RANDOM_STATE = 1102
@@ -623,6 +662,7 @@ class AutoML:
         self.features_engineering = features_engineering
         self.do_redundance_test_X = do_redundance_test_X
         self.flush_intermediate_steps = flush_intermediate_steps
+        self.n_jobs = n_jobs
         
         #initializing control maps
         self.selected_algos_map = {}
@@ -679,7 +719,7 @@ class AutoML:
         
         if len(self.str_columns) > 0:
             #do tfidf
-            result_list = Parallel(n_jobs=-3, backend='multiprocessing')(delayed(parallel_tfidf) 
+            result_list = Parallel(n_jobs=self.n_jobs, backend='multiprocessing')(delayed(parallel_tfidf) 
                                     (col_name, self.X[col_name])
                                     for col_name in self.str_columns)
             for result in result_list:
@@ -730,7 +770,7 @@ class AutoML:
                 self.metrics_classification_map[y] = ['roc_auc', 'f1', 'accuracy']
         #metrics reference: https://scikit-learn.org/stable/modules/model_evaluation.html
 
-        result_list = Parallel(n_jobs=-3, backend='multiprocessing')(delayed(parallel_process_y) 
+        result_list = Parallel(n_jobs=self.n_jobs, backend='multiprocessing')(delayed(parallel_process_y) 
                                 (self, y)
                                 for y in self.y_colname_list)
             
@@ -842,7 +882,7 @@ class AutoML:
 
         t0 = time.perf_counter()
         
-        result_list = Parallel(n_jobs=-3, backend="multiprocessing")(delayed(parallel_process_fit)
+        result_list = Parallel(n_jobs=self.n_jobs, backend="multiprocessing")(delayed(parallel_process_fit)
                                         (y, self.getMetrics(y), self.YisCategorical(y))
                                         for y in self.y_colname_list)
         
@@ -888,7 +928,7 @@ class AutoML:
             self.results[y].sort_values(by=[self.main_metric_map[y], 'predict_time'], ascending=[False,True], inplace=True)
             self.results[y] = self.results[y].rename_axis('train_order').reset_index()
                 
-        Parallel(n_jobs=-3, backend="threading")(delayed(ga_process_fit)
+        Parallel(n_jobs=self.n_jobs, backend="threading")(delayed(ga_process_fit)
                                                  (y)
                                                  for y in self.y_colname_list)
         
