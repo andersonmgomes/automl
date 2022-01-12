@@ -45,10 +45,11 @@ from sklearn.exceptions import ConvergenceWarning
 from sklearn.feature_extraction import text
 from sklearn.feature_extraction.text import TfidfVectorizer
 from joblib import dump, load
+import sys
 import logging
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 
-def _flush_intermediate_steps(obj, label_list = [''], dth=datetime.now(), index=False, output_type='gzip'):
+def _flush_intermediate_steps(obj, label_list = [''], dth=datetime.now(), index=False, output_type='gzip', overwrite=True):
     #saving df in a csv file
     filename = dth.strftime("%Y%m%d_%H%M%S")
     
@@ -66,12 +67,18 @@ def _flush_intermediate_steps(obj, label_list = [''], dth=datetime.now(), index=
     if not os.path.exists(filedir):
         os.mkdir(filedir)
 
+    file_path = os.path.join(filedir, filename)
+    
+    if not(overwrite) and os.path.exists(file_path):
+        return None
+
     if output_type == 'gzip':
-        obj.to_parquet(os.path.join(filedir, filename), index=index, compression='gzip', engine='fastparquet')
+        obj.to_parquet(file_path, index=index, compression='gzip', engine='fastparquet')
     elif output_type == 'csv':
-        obj.to_csv(os.path.join(filedir, filename), index=index)
+        obj.to_csv(file_path, index=index)
     elif output_type == 'joblib':
-        dump(obj, os.path.join(filedir, filename))
+        dump(obj, file_path)
+    sys.stdout.flush()
 
 def flushResults(automl_obj, y):
     df = automl_obj.results[y].copy()
@@ -79,15 +86,17 @@ def flushResults(automl_obj, y):
     df['algorithm'] = df['algorithm'].astype(str)
     df['features'] = df['features'].astype(str)
     df['confusion_matrix'] = df['confusion_matrix'].astype(str)
-    _flush_intermediate_steps(df, ['RESULTS', automl_obj.ds_name, y], automl_obj.start_time)
+    _flush_intermediate_steps(df, ['RESULTS', automl_obj.ds_name, y], dth=automl_obj.start_time, output_type='csv')
 
     #saving the best model
-    best_model = automl_obj.results[y]['algorithm'].iloc[0]
-    _flush_intermediate_steps(best_model, ['best_model', automl_obj.ds_name, y]
-                              , automl_obj.start_time, output_type='joblib')
-    
-    
-
+    df = automl_obj.results[y].copy()
+    df.reset_index(drop=True, inplace=True)
+    best_row = df.iloc[df[automl_obj.main_metric_map[y]].idxmax()]
+    best_model = best_row['algorithm']
+    main_metric_value = best_row[automl_obj.main_metric_map[y]]
+    main_metric_value = int(10000*main_metric_value) #to avoid 0 and generate a unique filename
+    _flush_intermediate_steps(best_model, ['best_model', automl_obj.ds_name, y, main_metric_value]
+                              , output_type='joblib', dth=automl_obj.start_time, overwrite=False)
 
 def features_corr_level_Y(i, X, y, threshold):
     #features engineering
@@ -191,14 +200,14 @@ def evaluation(individual, automl_obj, y):
                                , param_grid=automl_obj.algorithms[algo_instance.__class__]
                                , scoring=automl_obj.main_metric_map[y]
                                , cv=5
-                               , verbose=0, n_jobs=-1
+                               , verbose=0, n_jobs=-3
                                )
         else:
             opt = BayesSearchCV(estimator=algo_instance
                                 , search_spaces=automl_obj.algorithms[algo_instance.__class__]
                                 , scoring=automl_obj.main_metric_map[y]
                                 , n_iter=automl_obj.n_inter_bayessearch, cv=5
-                                , verbose=0, n_jobs=-1, random_state=automl_obj.RANDOM_STATE
+                                , verbose=0, n_jobs=-3, random_state=automl_obj.RANDOM_STATE
                                 )
         opt.fit(X_train2, automl_obj.y_train_map[y])
 
@@ -265,7 +274,7 @@ def evaluation(individual, automl_obj, y):
         log_msg += ' | ' + str(algo_instance)[:str(algo_instance).find('(')] 
         log_msg += ' | ' + str(len(col_tuple)) + ' features'
         params_str = str(params)
-        params_str = params_str.replace("'n_jobs': -1,","").replace("  ", " ").replace("{ ", "{").replace(" }", "}")
+        params_str = params_str.replace("'n_jobs': -3,","").replace("  ", " ").replace("{ ", "{").replace(" }", "}")
         log_msg += ' | ' + params_str
 
         logging.info(log_msg[:150])#show only the 150 first caracteres
@@ -416,7 +425,7 @@ def parallel_process_y(automlobj, y):
     if automlobj.features_engineering:
         n_cols = X_train.shape[1]
         logging.info('[' + y + '] Features engineering - Testing correlation with Y...')
-        considered_features = Parallel(n_jobs=-1, backend="threading")(delayed(features_corr_level_Y)
+        considered_features = Parallel(n_jobs=-3, backend="threading")(delayed(features_corr_level_Y)
                                 (j
                                 , X_train.iloc[:,j]#._to_pandas()
                                 , y_train
@@ -435,7 +444,7 @@ def parallel_process_y(automlobj, y):
             logging.info('[' + y + '] Features engineering - Testing redudance between features...')    
             
             n_cols = X_train.shape[1]
-            considered_features = Parallel(n_jobs=-1, backend="threading")(delayed(features_corr_level_X)
+            considered_features = Parallel(n_jobs=-3, backend="threading")(delayed(features_corr_level_X)
                                     (j
                                     , X_train.iloc[:,j]#._to_pandas()
                                     , X_train.iloc[:,j+1:]#._to_pandas()
@@ -544,7 +553,7 @@ class AutoML:
         HistGradientBoostingClassifier:{
             "warm_start": [True, False],
             },
-        #TPOTClassifier(verbosity=0, n_jobs=-1):{},
+        #TPOTClassifier(verbosity=0, n_jobs=-3):{},
         linear_model.LinearRegression:{
             "fit_intercept": [True, False],
             "n_jobs": [-1],
@@ -667,7 +676,7 @@ class AutoML:
         
         if len(self.str_columns) > 0:
             #do tfidf
-            result_list = Parallel(n_jobs=-1, backend='multiprocessing')(delayed(parallel_tfidf) 
+            result_list = Parallel(n_jobs=-3, backend='multiprocessing')(delayed(parallel_tfidf) 
                                     (col_name, self.X[col_name])
                                     for col_name in self.str_columns)
             for result in result_list:
@@ -715,10 +724,10 @@ class AutoML:
             self.metrics_classification_map = {}
             for y in self.y_colname_list:
                 self.metrics_regression_map[y] = ['r2', 'neg_mean_absolute_error', 'neg_mean_squared_error']
-                self.metrics_classification_map[y] = ['f1', 'accuracy', 'roc_auc']
+                self.metrics_classification_map[y] = ['roc_auc', 'f1', 'accuracy']
         #metrics reference: https://scikit-learn.org/stable/modules/model_evaluation.html
 
-        result_list = Parallel(n_jobs=-1, backend='multiprocessing')(delayed(parallel_process_y) 
+        result_list = Parallel(n_jobs=-3, backend='multiprocessing')(delayed(parallel_process_y) 
                                 (self, y)
                                 for y in self.y_colname_list)
             
@@ -742,7 +751,7 @@ class AutoML:
                         self.metrics_classification_map[y][j] = 'recall_weighted'
                     elif m == 'precision':
                         self.metrics_classification_map[y][j] = 'precision_weighted'
-            logging.info('[' + y + ']    Applied metrics: ' + str(self.metrics_classification_map[y]))
+            logging.info('[' + y + '] Applied metrics: ' + str(self.metrics_classification_map[y]))
             #X_train, X_test, y_train, y_test
             self.X_train_map[y] = tuple_result[5]
             self.X_test_map[y] = tuple_result[6]
@@ -830,7 +839,7 @@ class AutoML:
 
         t0 = time.perf_counter()
         
-        result_list = Parallel(n_jobs=-1, backend="multiprocessing")(delayed(parallel_process_fit)
+        result_list = Parallel(n_jobs=-3, backend="multiprocessing")(delayed(parallel_process_fit)
                                         (y, self.getMetrics(y), self.YisCategorical(y))
                                         for y in self.y_colname_list)
         
@@ -851,8 +860,6 @@ class AutoML:
                 #else: all right
                 self.selected_algos_map[y].append(algo)
             
-            #logging.info('[' + y + '] Selected algorithms:', [self.__class2str(x) for x in self.selected_algos_map[y]])
-
             #setup the bitmap to genetic algorithm
             self.n_bits_algos_map[y] = len(bautil.int2ba(len(self.selected_algos_map[y])-1))#TODO: analyze de number of bits to use
             n_cols = self.X_train_map[y].shape[1] + self.n_bits_algos_map[y]
@@ -862,17 +869,9 @@ class AutoML:
             #main metric column
             self.main_metric_map[y] = self.getMetrics(y)[0] #considering the first element the most important
 
-            #calculating the size of population (features x algorithms)
-            n_train_sets = 0
-            for k in range(1, self.X_train_map[y].shape[1] + 1):
-                n_train_sets += comb(self.X_train_map[y].shape[1] + 1, k, exact=False)
-                if math.isinf(n_train_sets):
-                    break
-
-            logging.info('[' + y + '] Nº of training possible basic combinations:'
-                + str(n_train_sets*len(self.selected_algos_map[y]))
-                + '(' + str(n_train_sets) + 'features combinations,'
-                + str(len(self.selected_algos_map[y])) +' algorithms)')
+            logging.info('[' + y + '] Nº of features: '
+                + str(self.X_train_map[y].shape[1])
+                + ' | Nº of algorithms: ' + str(len(self.selected_algos_map[y])))
 
         del(result_list)
                 
@@ -886,7 +885,7 @@ class AutoML:
             self.results[y].sort_values(by=[self.main_metric_map[y], 'predict_time'], ascending=[False,True], inplace=True)
             self.results[y] = self.results[y].rename_axis('train_order').reset_index()
                 
-        Parallel(n_jobs=-1, backend="threading")(delayed(ga_process_fit)
+        Parallel(n_jobs=-3, backend="threading")(delayed(ga_process_fit)
                                                  (y)
                                                  for y in self.y_colname_list)
         
