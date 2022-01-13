@@ -975,14 +975,15 @@ class AutoML:
     def YisCategorical(self, col_name) -> bool:
         def is_cat():
             y_type = self.y_full[col_name].dtypes
-
             if (y_type == np.bool_
                 or y_type == np.str_):
                 return True
             #else
-            return (all(self.y_full[col_name].apply(lambda x: x.is_integer()))
-                    and len(self.y_full[col_name].unique()) <= self.__unique_categoric_limit
-                    )
+            if len(self.y_full[col_name].unique()) > self.__unique_categoric_limit:
+                return False
+            if str(y_type)[:3] == 'int':
+                return True 
+            return all(self.y_full[col_name].apply(lambda x: x.is_integer()))
         
         if col_name not in self.y_is_categoric_map:
             self.y_is_categoric_map[col_name] = is_cat()
