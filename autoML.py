@@ -46,6 +46,7 @@ from sklearn.feature_extraction import text
 from sklearn.feature_extraction.text import TfidfVectorizer
 from joblib import dump, load
 import sys
+from imblearn.over_sampling import RandomOverSampler
 import logging
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 
@@ -96,19 +97,10 @@ def flushResults(automl_obj, y):
             _flush_intermediate_steps(df_predict, ['predict', automl_obj.ds_name, file]
                                     , output_type='csv', overwrite=True)
 
-    df = automl_obj.results[y].copy()
-    
-    #convert object to string
-    df['algorithm'] = df['algorithm'].astype(str)
-    df['features'] = df['features'].astype(str)
-    df['confusion_matrix'] = df['confusion_matrix'].astype(str)
-    _flush_intermediate_steps(df, ['RESULTS', automl_obj.ds_name, y], output_type='csv')
-
     #saving the best model
     df = automl_obj.results[y].copy()
     df.reset_index(drop=True, inplace=True)
     best_row = df.iloc[df[automl_obj.main_metric_map[y]].idxmax()]
-    best_model = best_row['algorithm']
     main_metric_value = best_row[automl_obj.main_metric_map[y]]
     main_metric_value = int(10000*main_metric_value) #to avoid 0 and generate a unique filename
     #_flush_intermediate_steps(best_model, ['best_model', automl_obj.ds_name, y]
@@ -116,8 +108,14 @@ def flushResults(automl_obj, y):
 
     if y not in best_results or best_results[y][automl_obj.main_metric_map[y]] < main_metric_value:
         best_results[y] = best_row
-        #processing batch test datasets
-        processing_test_datasets()
+        if len(best_results.keys()) == len(automl_obj.y_colname_list):
+            processing_test_datasets()
+        
+        #convert object to string
+        df['algorithm'] = df['algorithm'].astype(str)
+        df['features'] = df['features'].astype(str)
+        df['confusion_matrix'] = df['confusion_matrix'].astype(str)
+        _flush_intermediate_steps(df, ['RESULTS', automl_obj.ds_name, y], output_type='csv')
     
 def features_corr_level_Y(i, X, y, threshold):
     #features engineering
@@ -316,8 +314,8 @@ def evaluation(individual, automl_obj, y):
 
     automl_obj.results[y].loc[len(automl_obj.results[y])] = result_row
 
-    log_msg = '*[' + y + '] Model trained: ' +  str(opt.best_score_)
-    log_msg += ' = {:.5f}'.format(result_row[automl_obj.main_metric_map[y]]) 
+    log_msg = '*[' + y + '] Model trained:'
+    log_msg += ' {:.5f}'.format(result_row[automl_obj.main_metric_map[y]]) 
     log_msg += ' | ' + str(algo_instance)[:str(algo_instance).find('(')] 
     log_msg += ' | ' + str(len(col_tuple)) + ' features'
     params_str = str(result_row['params'])
@@ -760,10 +758,6 @@ class AutoML:
         self.X = reduce_mem_usage(self.X)
         logging.info('X dimensions after Normalization: ' + str(self.X.shape))
 
-        if flush_intermediate_steps:
-            _flush_intermediate_steps(pd.concat([self.X.reset_index(drop=True), self.y_full.reset_index(drop=True)], axis=1)
-                                        , [self.ds_name, 'NORMAL'])
-
         self.metrics_regression_map = metrics
         self.metrics_classification_map = metrics
         if metrics is None:
@@ -816,6 +810,17 @@ class AutoML:
             _flush_intermediate_steps(selfeat_df, label_list=[self.ds_name, 'SELECTED_FEATURES']
                                         , output_type='csv')            
             
+        #balancing the dataset
+        logging.info('Balancing the dataset...')
+        for y_colname in self.y_colname_list:
+            over = RandomOverSampler(random_state=self.RANDOM_STATE)
+            self.X, self.y_full[y] = over.fit_resample(self.X, self.y_full[y])
+        logging.info('X dimensions after Balancing Process: ' + str(self.X.shape))
+
+        if flush_intermediate_steps:
+            _flush_intermediate_steps(pd.concat([self.X.reset_index(drop=True), self.y_full.reset_index(drop=True)], axis=1)
+                                        , [self.ds_name, 'NORMAL_BALANCED'])
+
         #loading test files
         self.test_df_map = {}
         test_path = os.path.abspath('./to_process') #process directory
