@@ -810,12 +810,12 @@ class AutoML:
             _flush_intermediate_steps(selfeat_df, label_list=[self.ds_name, 'SELECTED_FEATURES']
                                         , output_type='csv')            
             
-        #balancing the dataset
-        logging.info('Balancing the dataset...')
+        #balancing the train datasets
         for y_colname in self.y_colname_list:
+            logging.info('[' + y_colname + '] Balancing the dataset...')
             over = RandomOverSampler(random_state=self.RANDOM_STATE)
-            self.X, self.y_full[y] = over.fit_resample(self.X, self.y_full[y])
-        logging.info('X dimensions after Balancing Process: ' + str(self.X.shape))
+            self.X_train_map[y], self.y_full[y] = over.fit_resample(self.X_train_map[y], self.y_full[y])
+            logging.info('[' + y_colname + '] X_train dimensions after Balancing Process: ' + str(self.X_train_map[y].shape))
 
         if flush_intermediate_steps:
             _flush_intermediate_steps(pd.concat([self.X.reset_index(drop=True), self.y_full.reset_index(drop=True)], axis=1)
