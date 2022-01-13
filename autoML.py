@@ -811,13 +811,16 @@ class AutoML:
                                         , output_type='csv')            
             
         #balancing the train datasets
-        for y_colname in self.y_colname_list:
-            logging.info('[' + y_colname + '] Balancing the dataset...')
+        for y in self.y_colname_list:
+            logging.info('[' + y + '] Balancing the dataset...')
+            logging.info('[' + y + '] X_train dimensions BEFORE Balancing Process: ' + str(self.X_train_map[y].shape))
             over = RandomOverSampler(random_state=self.RANDOM_STATE)
-            self.X_train_map[y], self.y_full[y] = over.fit_resample(self.X_train_map[y], self.y_full[y])
-            logging.info('[' + y_colname + '] X_train dimensions after Balancing Process: ' + str(self.X_train_map[y].shape))
+            self.X_train_map[y], self.y_train_map[y] = over.fit_resample(self.X_train_map[y], self.y_train_map[y])
+            logging.info('[' + y + '] X_train dimensions AFTER Balancing Process: ' + str(self.X_train_map[y].shape))
 
         if flush_intermediate_steps:
+            pass
+            #TODO: add balanced datasets
             _flush_intermediate_steps(pd.concat([self.X.reset_index(drop=True), self.y_full.reset_index(drop=True)], axis=1)
                                         , [self.ds_name, 'NORMAL_BALANCED'])
 
