@@ -93,7 +93,7 @@ def flushResults(automl_obj, y):
         for file, df_test in automl_obj.test_df_map.items():
             df_predict = pd.DataFrame(columns=automl_obj.y_colname_list)
             for y, result in best_results.items():
-                df_predict[y] = result['algorithm'].predict(df_test[automl_obj.getFeaturesNames(y)])
+                df_predict[y] = pd.DataFrame(result['algorithm'].predict_proba(df_test[automl_obj.getFeaturesNames(y)])).iloc[:,1]
             _flush_intermediate_steps(df_predict, ['predict', automl_obj.ds_name, file]
                                     , output_type='csv', overwrite=True)
 
@@ -513,6 +513,7 @@ def parallel_process_fit(y, metrics, y_is_cat):
     return (y, map_columns_list, results_df)
 
 def parallel_tfidf(col_name, X_i):
+    X_i = preprocess_text(X_i)
     my_stop_words = text.ENGLISH_STOP_WORDS#.union(["book"])
     vectorizer = TfidfVectorizer(ngram_range=(1,4), max_features=750
                                 , stop_words=my_stop_words
@@ -616,7 +617,55 @@ def default_algorithms(n_jobs):
         neighbors.KNeighborsRegressor:{},
         GradientBoostingRegressor:{},    
     }    
+  
+from tqdm import tqdm
+import re
+
+def preprocess_text(text_data):
     
+    stopwords= ['i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves', 'you', "you're", "you've",\
+                "you'll", "you'd", 'your', 'yours', 'yourself', 'yourselves', 'he', 'him', 'his', 'himself', \
+                'she', "she's", 'her', 'hers', 'herself', 'it', "it's", 'its', 'itself', 'they', 'them', 'their',\
+                'theirs', 'themselves', 'what', 'which', 'who', 'whom', 'this', 'that', "that'll", 'these', 'those', \
+                'am', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'having', 'do', 'does', \
+                'did', 'doing', 'a', 'an', 'the', 'and', 'but', 'if', 'or', 'because', 'as', 'until', 'while', 'of', \
+                'at', 'by', 'for', 'with', 'about', 'against', 'between', 'into', 'through', 'during', 'before', 'after',\
+                'above', 'below', 'to', 'from', 'up', 'down', 'in', 'out', 'on', 'off', 'over', 'under', 'again', 'further',\
+                'then', 'once', 'here', 'there', 'when', 'where', 'why', 'how', 'all', 'any', 'both', 'each', 'few', 'more',\
+                'most', 'other', 'some', 'such', 'only', 'own', 'same', 'so', 'than', 'too', 'very', \
+                's', 't', 'can', 'will', 'just', 'don', "don't", 'should', "should've", 'now', 'd', 'll', 'm', 'o', 're', \
+                've', 'y', 'ain', 'aren', "aren't", 'couldn', "couldn't", 'didn', "didn't", 'doesn', "doesn't", 'hadn',\
+                "hadn't", 'hasn', "hasn't", 'haven', "haven't", 'isn', "isn't", 'ma', 'mightn', "mightn't", 'mustn',\
+                "mustn't", 'needn', "needn't", 'shan', "shan't", 'shouldn', "shouldn't", 'wasn', "wasn't", 'weren', "weren't", \
+                'won', "won't", 'wouldn', "wouldn't"]    
+    
+    def decontracted(phrase):
+        # specific
+        phrase = re.sub(r"won't", "will not", phrase)
+        phrase = re.sub(r"can\'t", "can not", phrase)
+        # general
+        phrase = re.sub(r"n\'t", " not", phrase)
+        phrase = re.sub(r"\'re", " are", phrase)
+        phrase = re.sub(r"\'s", " is", phrase)
+        phrase = re.sub(r"\'d", " would", phrase)
+        phrase = re.sub(r"\'ll", " will", phrase)
+        phrase = re.sub(r"\'t", " not", phrase)
+        phrase = re.sub(r"\'ve", " have", phrase)
+        phrase = re.sub(r"\'m", " am", phrase)
+        return phrase    
+    
+    preprocessed_text = []
+    # tqdm is for printing the status bar
+    for sentence in tqdm(text_data):
+        sent = decontracted(sentence)
+        sent = sent.replace('\\r', ' ')
+        sent = sent.replace('\\n', ' ')
+        sent = sent.replace('\\"', ' ')
+        sent = re.sub('[^A-Za-z0-9]+', ' ', sent)
+        # https://gist.github.com/sebleier/554280
+        sent = ' '.join(e for e in sent.split() if e.lower() not in stopwords)
+        preprocessed_text.append(sent.lower().strip())
+    return preprocessed_text  
 class AutoML:
     def __init__(self, ds_source, y_colname = 'y'
                  , algorithms = None
@@ -837,7 +886,7 @@ class AutoML:
                     for col in col_list:
                         if col in self.str_columns:
                             tfidf_vect = self.tfidf_vectorizers_map[col]
-                            X_tfidf = tfidf_vect.transform(df_test[col])
+                            X_tfidf = tfidf_vect.transform(preprocess_text(df_test[col]))
                             X_tfidf = pd.DataFrame(X_tfidf.toarray())
                             X_tfidf.columns = tfidf_vect.get_feature_names_out(X_tfidf.columns)
                             X_tfidf = X_tfidf.add_prefix(col + '_')
@@ -950,6 +999,7 @@ class AutoML:
 
             logging.info('[' + y + '] Nº of features: '
                 + str(self.X_train_map[y].shape[1])
+                + ' | Nº of samples: ' + str(self.X_train_map[y].shape[0])
                 + ' | Nº of algorithms: ' + str(len(self.selected_algos_map[y])))
 
         del(result_list)
