@@ -80,6 +80,7 @@ def _flush_intermediate_steps(obj, label_list = [''], dth=None, index=False, out
         obj.to_csv(file_path, index=index)
     elif output_type == 'joblib':
         dump(obj, file_path)
+    logging.info(filename + ' saved')
     sys.stdout.flush()
 
 best_results = {} #TODO: relocate to a better place
@@ -89,18 +90,19 @@ def flushResults(automl_obj, y):
     
     def processing_test_datasets():
         for file, df_test in automl_obj.test_df_map.items():
-            df_predict = pd.DataFrame(columns=best_results.keys())
+            df_predict = pd.DataFrame(columns=automl_obj.y_colname_list)
             for y, result in best_results.items():
                 df_predict[y] = result['algorithm'].predict(df_test[automl_obj.getFeaturesNames(y)])
             _flush_intermediate_steps(df_predict, ['predict', automl_obj.ds_name, file]
-                                    , output_type='csv', overwrite=True, dth=automl_obj.start_time)
+                                    , output_type='csv', overwrite=True)
 
     df = automl_obj.results[y].copy()
+    
     #convert object to string
     df['algorithm'] = df['algorithm'].astype(str)
     df['features'] = df['features'].astype(str)
     df['confusion_matrix'] = df['confusion_matrix'].astype(str)
-    _flush_intermediate_steps(df, ['RESULTS', automl_obj.ds_name, y], dth=automl_obj.start_time, output_type='csv')
+    _flush_intermediate_steps(df, ['RESULTS', automl_obj.ds_name, y], output_type='csv')
 
     #saving the best model
     df = automl_obj.results[y].copy()
@@ -109,8 +111,8 @@ def flushResults(automl_obj, y):
     best_model = best_row['algorithm']
     main_metric_value = best_row[automl_obj.main_metric_map[y]]
     main_metric_value = int(10000*main_metric_value) #to avoid 0 and generate a unique filename
-    _flush_intermediate_steps(best_model, ['best_model', automl_obj.ds_name, y]
-                              , output_type='joblib', dth=automl_obj.start_time, overwrite=True)
+    #_flush_intermediate_steps(best_model, ['best_model', automl_obj.ds_name, y]
+    #                          , output_type='joblib', dth=automl_obj.start_time, overwrite=True)
 
     if y not in best_results or best_results[y][automl_obj.main_metric_map[y]] < main_metric_value:
         best_results[y] = best_row
@@ -175,7 +177,7 @@ def evaluation(individual, automl_obj, y):
         return float2bigint(-1)
 
     #seeking for some previous result
-    previous_result = automl_obj.results[y][(automl_obj.results[y]['algorithm'] == algo_instance.__class__) 
+    previous_result = automl_obj.results[y][(automl_obj.results[y]['algorithm'].__class__ == algo_instance.__class__) 
                                         & (automl_obj.results[y]['features'] == col_tuple)]
     if previous_result.shape[0]>0:
         return float2bigint(previous_result.iloc[0][automl_obj.main_metric_map[y]])
@@ -191,7 +193,7 @@ def evaluation(individual, automl_obj, y):
             if is_Voting_or_Stacking(row[1]['algorithm']):
                 continue
             
-            candidate_algo = row[1]['algorithm']()
+            candidate_algo = row[1]['algorithm']
             candidate_algo.set_params(**row[1]['params'])
             
             if candidate_algo.__class__ not in [x.__class__ for x in best_estimators]:
@@ -209,8 +211,6 @@ def evaluation(individual, automl_obj, y):
         X_train2 = np.asanyarray(X_train2).reshape(-1, 1)
         X_test2 = np.asanyarray(X_test2).reshape(-1, 1)
 
-    scoring_list = automl_obj.getMetrics(y)
-    
     #tunning parameters
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", category=ConvergenceWarning)
@@ -218,18 +218,43 @@ def evaluation(individual, automl_obj, y):
             opt = GridSearchCV(estimator=algo_instance
                                , param_grid=automl_obj.algorithms[algo_instance.__class__]
                                , scoring=automl_obj.main_metric_map[y]
-                               , cv=5
+                               , cv=automl_obj.n_folds_cv
                                , verbose=0, n_jobs=automl_obj.n_jobs
                                )
         else:
             opt = BayesSearchCV(estimator=algo_instance
                                 , search_spaces=automl_obj.algorithms[algo_instance.__class__]
                                 , scoring=automl_obj.main_metric_map[y]
-                                , n_iter=automl_obj.n_inter_bayessearch, cv=5
+                                , n_iter=automl_obj.n_inter_bayessearch, cv=automl_obj.n_folds_cv
                                 , verbose=0, n_jobs=automl_obj.n_jobs, random_state=automl_obj.RANDOM_STATE
                                 )
         opt.fit(X_train2, automl_obj.y_train_map[y])
 
+    result_row = {'algorithm': opt.best_estimator_
+            , 'params': opt.best_params_
+            , 'features': col_tuple
+            , 'n_features': len(col_tuple)
+            , 'train_time': opt.cv_results_['mean_fit_time'][opt.best_index_]
+            , 'predict_time': opt.cv_results_['mean_score_time'][opt.best_index_]
+            }
+
+    if isinstance(result_row['params'], OrderedDict):
+        #changing the type to dict (when using BayesSearchCV)
+        result_row['params'] = dict(result_row['params'])
+
+    if automl_obj.YisCategorical(y):
+        #confusion matrix
+        result_row['confusion_matrix'] = confusion_matrix(automl_obj.y_test_map[y], opt.best_estimator_.predict(X_test2), labels=automl_obj.y_classes_map[y])
+
+    if (is_Voting_or_Stacking(algo_instance)
+        and len(algo_instance.estimators)>0):
+        #incluing the estimators in the row
+        result_row['params'].update({'estimators': opt.best_estimator_.estimators})
+
+    for scor_str in automl_obj.getMetrics(y):
+        result_row[scor_str] = (get_scorer(scor_str)(opt.best_estimator_, X_test2, automl_obj.y_test_map[y]))
+
+    '''
     def fit_score():
         estimator = algo_instance.set_params(**params)
         row = {'algorithm': estimator#.__class__
@@ -269,7 +294,7 @@ def evaluation(individual, automl_obj, y):
             params = dict(params)
             
         #seeking for some previous result
-        previous_result = automl_obj.results[y][(automl_obj.results[y]['algorithm'] == algo_instance.__class__) 
+        previous_result = automl_obj.results[y][(automl_obj.results[y]['algorithm'].__class__ == algo_instance.__class__) 
                                              & ((automl_obj.results[y]['params'] == params) | is_Voting_or_Stacking(algo_instance))
                                             & (automl_obj.results[y]['features'] == col_tuple)]
         if previous_result.shape[0]>0:
@@ -287,19 +312,22 @@ def evaluation(individual, automl_obj, y):
 
         if row_result[automl_obj.main_metric_map[y]] > best_score:
             best_score = row_result[automl_obj.main_metric_map[y]]
-            
-        log_msg = '*[' + y + '] Model trained: ' + str(scoring_list[0]) 
-        log_msg += ' = {:.5f}'.format(row_result[automl_obj.main_metric_map[y]]) 
-        log_msg += ' | ' + str(algo_instance)[:str(algo_instance).find('(')] 
-        log_msg += ' | ' + str(len(col_tuple)) + ' features'
-        params_str = str(params)
-        params_str = params_str.replace("'n_jobs': -3,","").replace("  ", " ").replace("{ ", "{").replace(" }", "}")
-        log_msg += ' | ' + params_str
+        '''    
 
-        logging.info(log_msg[:150])#show only the 150 first caracteres
- 
+    automl_obj.results[y].loc[len(automl_obj.results[y])] = result_row
+
+    log_msg = '*[' + y + '] Model trained: ' +  str(opt.best_score_)
+    log_msg += ' = {:.5f}'.format(result_row[automl_obj.main_metric_map[y]]) 
+    log_msg += ' | ' + str(algo_instance)[:str(algo_instance).find('(')] 
+    log_msg += ' | ' + str(len(col_tuple)) + ' features'
+    params_str = str(result_row['params'])
+    params_str = params_str.replace("'n_jobs': " + str(automl_obj.n_jobs) + ",","").replace("  ", " ").replace("{ ", "{").replace(" }", "}")
+    log_msg += ' | ' + params_str
+
+    logging.info(log_msg[:150])#show only the 150 first caracteres
+        
     flushResults(automl_obj, y)
-    return float2bigint(best_score) #main metric
+    return float2bigint(opt.best_score_) #main metric
 
 def gen_first_people(n_features, n_algos, n_bits_algos):
     first_people = []
@@ -342,7 +370,7 @@ def ga_toolbox(automl_obj, y):
 
 def reduce_mem_usage(df, verbose=True):
     numerics = ['int16', 'int32', 'int64', 'float16', 'float32', 'float64']
-    start_mem = df.memory_usage().sum() / 1024**2
+    start_mem = df.memory_usage(deep=True).sum() / 1024**2
     logging.info('Original memory usage {:5.2f} Mb'.format(start_mem))
     for col in df.columns:
         col_type = df[col].dtypes
@@ -351,11 +379,7 @@ def reduce_mem_usage(df, verbose=True):
             c_max = df[col].max()
             if str(col_type)[:3] == 'int':
                 if c_min > np.iinfo(np.int8).min and c_max < np.iinfo(np.int8).max:
-                    #test if is boolean
-                    if df[col].unique().shape[0] == 2:
-                        df[col] = df[col].astype(bool)
-                    else:
-                        df[col] = df[col].astype(np.int8)
+                    df[col] = df[col].astype(np.int8)
                 elif c_min > np.iinfo(np.int16).min and c_max < np.iinfo(np.int16).max:
                     df[col] = df[col].astype(np.int16)
                 elif c_min > np.iinfo(np.int32).min and c_max < np.iinfo(np.int32).max:
@@ -364,20 +388,12 @@ def reduce_mem_usage(df, verbose=True):
                     df[col] = df[col].astype(np.int64)  
             else:
                 if c_min > np.finfo(np.float16).min and c_max < np.finfo(np.float16).max:
-                    #test if is integer
-                    if c_min>=0 and c_max<=1:
-                        #test if is boolean
-                        if df[col].dropna().unique().shape[0] == 2:
-                            df[col] = df[col].astype(bool)
-                        else:
-                            df[col] = df[col].astype(np.int8)
-                    else:                        
-                        df[col] = df[col].astype(np.float16)
+                    df[col] = df[col].astype(np.float16)
                 elif c_min > np.finfo(np.float32).min and c_max < np.finfo(np.float32).max:
                     df[col] = df[col].astype(np.float32)
                 else:
                     df[col] = df[col].astype(np.float64)    
-    end_mem = df.memory_usage().sum() / 1024**2
+    end_mem = df.memory_usage(deep=True).sum() / 1024**2
     if verbose: 
         logging.info('Mem. usage decreased to {:5.2f} Mb ({:.1f}% reduction)'.format(
             end_mem, 100 * (start_mem - end_mem) / start_mem))
@@ -621,6 +637,7 @@ class AutoML:
                  , ds_sample_frac = 1
                  , do_redundance_test_X = False
                  , n_jobs = 1
+                 , n_folds_cv = 10
                  ) -> None:
         self.start_time = datetime.now()
 
@@ -648,6 +665,7 @@ class AutoML:
         self.do_redundance_test_X = do_redundance_test_X
         self.flush_intermediate_steps = flush_intermediate_steps
         self.n_jobs = n_jobs
+        self.n_folds_cv = n_folds_cv
         
         #initializing control maps
         self.selected_algos_map = {}
@@ -686,6 +704,7 @@ class AutoML:
         self.X_test_map = {}
         self.y_train_map = {}
         self.y_test_map = {}
+        self.y_is_categoric_map = {}
 
         #setting X
         self.X = ds.drop(self.y_colname_list, axis=1)
@@ -805,21 +824,21 @@ class AutoML:
                 if file.endswith('.csv'):
                     file_path = os.path.join(test_path, file)
                     df_test = pd.read_csv(file_path)
-                    df_test.drop(columns=self.y_colname_list, inplace=True)
-                    if df_test is not None: #TODO: check why df_test is None in some cases
-                        for col in df_test.columns:
-                            if col in self.str_columns:
-                                tfidf_vect = self.tfidf_vectorizers_map[col]
-                                X_tfidf = tfidf_vect.transform(df_test[col])
-                                X_tfidf = pd.DataFrame(X_tfidf.toarray())
-                                X_tfidf.columns = tfidf_vect.get_feature_names_out(X_tfidf.columns)
-                                X_tfidf = X_tfidf.add_prefix(col + '_')
-                                df_test = pd.concat([df_test.reset_index(drop=True), X_tfidf.reset_index(drop=True)], axis=1)
-                            elif col in self.hot_columns:
-                                continue #TODO
-                            elif col not in self.getFeaturesNames(y):
-                                df_test = df_test.drop(columns=[col], inplace=True)
-                        self.test_df_map[str(file).replace('.csv', '')] = reduce_mem_usage(df_test)
+                    df_test = df_test.drop(columns=self.y_colname_list)
+                    col_list = list(df_test.columns)
+                    for col in col_list:
+                        if col in self.str_columns:
+                            tfidf_vect = self.tfidf_vectorizers_map[col]
+                            X_tfidf = tfidf_vect.transform(df_test[col])
+                            X_tfidf = pd.DataFrame(X_tfidf.toarray())
+                            X_tfidf.columns = tfidf_vect.get_feature_names_out(X_tfidf.columns)
+                            X_tfidf = X_tfidf.add_prefix(col + '_')
+                            df_test = pd.concat([df_test.reset_index(drop=True), X_tfidf.reset_index(drop=True)], axis=1)
+                        elif col in self.hot_columns:
+                            continue #TODO
+                        elif col not in self.getFeaturesNames(y):
+                            df_test = df_test.drop(columns=[col])
+                    self.test_df_map[str(file).replace('.csv', '')] = reduce_mem_usage(df_test)
 
     def clearResults(self):
         self.results = {} #cleaning the previous results
@@ -954,15 +973,21 @@ class AutoML:
         return type(self.y_full.iloc[0,0])
     
     def YisCategorical(self, col_name) -> bool:
-        y_type = self.y_full[col_name].dtypes
+        def is_cat():
+            y_type = self.y_full[col_name].dtypes
 
-        if (y_type == np.bool_
-            or y_type == np.str_):
-            return True
-        #else
-        return (str(y_type)[:3] == 'int'
-                and len(self.y_full[col_name].unique()) <= self.__unique_categoric_limit
-                )
+            if (y_type == np.bool_
+                or y_type == np.str_):
+                return True
+            #else
+            return (all(self.y_full[col_name].apply(lambda x: x.is_integer()))
+                    and len(self.y_full[col_name].unique()) <= self.__unique_categoric_limit
+                    )
+        
+        if col_name not in self.y_is_categoric_map:
+            self.y_is_categoric_map[col_name] = is_cat()
+        
+        return self.y_is_categoric_map[col_name]
     
     def YisContinuous(self, y) -> bool:
         return not self.YisCategorical(y)
@@ -1010,7 +1035,7 @@ if __name__ == '__main__':
                     , flush_intermediate_steps = True
                     , ds_sample_frac = 0.01
                     , min_x_y_correlation_rate=0.005
-                    , ngen=1
+                    , ngen=10
                     , ds_name='viaturas_fast'
                     , algorithms={KNeighborsClassifier: 
                         {"n_neighbors": [3,5,7]
