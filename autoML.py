@@ -252,66 +252,6 @@ def evaluation(individual, automl_obj, y):
     for scor_str in automl_obj.getMetrics(y):
         result_row[scor_str] = (get_scorer(scor_str)(opt.best_estimator_, X_test2, automl_obj.y_test_map[y]))
 
-    '''
-    def fit_score():
-        estimator = algo_instance.set_params(**params)
-        row = {'algorithm': estimator#.__class__
-               , 'params': params
-               , 'features': col_tuple
-               , 'n_features': len(col_tuple)
-               }
-
-        t0 = time.perf_counter()
-        
-        estimator.fit(X_train2, automl_obj.y_train_map[y])
-        row['train_time'] = time.perf_counter() - t0 #train_time
-        
-        t0 = time.perf_counter()
-        
-        for scor_str in scoring_list:
-            row[scor_str] = (get_scorer(scor_str)(estimator, X_test2, automl_obj.y_test_map[y]))
-        
-        row['predict_time'] = (time.perf_counter() - t0)/len(automl_obj.y_test_map[y]) #predict_time, considering one sample at a time
-        
-        if automl_obj.YisCategorical(y):
-            #confusion matrix
-            row['confusion_matrix'] = confusion_matrix(automl_obj.y_test_map[y], estimator.predict(X_test2), labels=automl_obj.y_classes_map[y])
-        
-        if (is_Voting_or_Stacking(algo_instance)
-            and len(algo_instance.estimators)>0):
-            #incluing the estimators in the row
-            row['params'].update({'estimators': estimator.estimators})
-            
-        return row
-        
-    best_score = -1.0
-    #dataframe format: ['algorithm', 'params', 'features', 'n_features', 'train_time', 'predict_time', 'mem_max', <metrics>]
-    for params in opt.cv_results_['params']: 
-        if isinstance(params, OrderedDict):
-            #changing the type to dict (when using BayesSearchCV)
-            params = dict(params)
-            
-        #seeking for some previous result
-        previous_result = automl_obj.results[y][(automl_obj.results[y]['algorithm'].__class__ == algo_instance.__class__) 
-                                             & ((automl_obj.results[y]['params'] == params) | is_Voting_or_Stacking(algo_instance))
-                                            & (automl_obj.results[y]['features'] == col_tuple)]
-        if previous_result.shape[0]>0:
-            continue
-        #else 
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            mem_max, row_result = memory_usage(proc=(fit_score)
-                                                , max_usage=True
-                                                , retval=True
-                                                , include_children=True)
-        row_result['mem_max'] = mem_max
-
-        automl_obj.results[y].loc[len(automl_obj.results[y])] = row_result
-
-        if row_result[automl_obj.main_metric_map[y]] > best_score:
-            best_score = row_result[automl_obj.main_metric_map[y]]
-        '''    
-
     automl_obj.results[y].loc[len(automl_obj.results[y])] = result_row
 
     log_msg = '*[' + y + '] Model trained:'
@@ -669,7 +609,7 @@ def preprocess_text(text_data):
 class AutoML:
     def __init__(self, ds_source, y_colname = 'y'
                  , algorithms = None
-                 , unique_categoric_limit = 10 
+                 , unique_categoric_limit = 25 
                  , min_x_y_correlation_rate = 0.01
                  , pool = None
                  , ds_name = None
@@ -797,7 +737,6 @@ class AutoML:
             del(temp_df)
             logging.info('X dimensions after One hot encoder: ' + str(self.X.shape))
 
-                
         #normalizing the variables
         logging.info('Normalizing the variables...')
         self.scaler = preprocessing.MinMaxScaler()
@@ -1039,7 +978,7 @@ class AutoML:
             #else
             if len(self.y_full[col_name].unique()) > self.__unique_categoric_limit:
                 return False
-            if str(y_type)[:3] == 'int':
+            if str(y_type)[:3] == 'int' or str(y_type) == 'object':
                 return True 
             return all(self.y_full[col_name].apply(lambda x: x.is_integer()))
         
