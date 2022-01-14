@@ -95,8 +95,13 @@ def flushResults(automl_obj, y):
     def processing_test_datasets():
         for file, df_test in automl_obj.test_df_map.items():
             df_predict = pd.DataFrame(columns=automl_obj.y_colname_list)
-            for y, result in best_results.items():
-                df_predict[y] = pd.DataFrame(result['algorithm'].predict_proba(df_test[automl_obj.getFeaturesNames(y)])).iloc[:,1]
+            for y, result in best_results.items(): #TODO: parallelize
+                if automl_obj.predict_proba:
+                    df_predict[y] = pd.DataFrame(result['algorithm'].predict_proba(df_test[automl_obj.getFeaturesNames(y)])).iloc[:,1]
+                else:
+                    y_pred = result['algorithm'].predict(df_test[automl_obj.getFeaturesNames(y)])
+                    y_pred = automl_obj.y_encoder_map[y].inverse_transform(np.asanyarray(y_pred).reshape(-1, 1))[:,0]
+                    df_predict[y] = pd.DataFrame(y_pred)
             _flush_intermediate_steps(df_predict, ['predict', automl_obj.ds_name, file]
                                     , output_type='csv', overwrite=True)
 
@@ -621,6 +626,7 @@ class AutoML:
                  , n_jobs = 1
                  , n_folds_cv = 10
                  , drop_nan_values = False
+                 , predict_proba = False
                  ) -> None:
         self.start_time = datetime.now()
 
@@ -649,6 +655,7 @@ class AutoML:
         self.flush_intermediate_steps = flush_intermediate_steps
         self.n_jobs = n_jobs
         self.n_folds_cv = n_folds_cv
+        self.predict_proba = predict_proba
         
         #initializing control maps
         self.selected_algos_map = {}
