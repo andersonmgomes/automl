@@ -1,23 +1,28 @@
+import inspect
+import logging
 import math
+import os
+import re
+import sys
 import time
-from typing import OrderedDict
 import warnings
 from datetime import datetime
 from multiprocessing import Pool
-import inspect
+from typing import OrderedDict
+
 import numpy as np
+import pandas as pd
+import pandas as pandas
+#import modin.pandas as pd #https://modin.readthedocs.io/
+import ray
 import scipy.stats as sta
 from bitarray import bitarray
 from bitarray import util as bautil
 from deap import algorithms, base, creator, tools
-from joblib import Parallel, delayed
+from imblearn.over_sampling import RandomOverSampler
+from joblib import Parallel, delayed, dump
 from memory_profiler import memory_usage
-import pandas as pd
-import pandas as pandas
-from tqdm import tqdm
 from modin.config import ProgressBar
-#import modin.pandas as pd #https://modin.readthedocs.io/
-import ray
 from scipy.special import comb
 from sklearn import linear_model, neighbors, preprocessing, svm, tree, utils
 from sklearn.base import ClassifierMixin, RegressorMixin
@@ -27,27 +32,25 @@ from sklearn.ensemble import (AdaBoostClassifier, GradientBoostingClassifier,
                               HistGradientBoostingClassifier,
                               RandomForestClassifier, StackingClassifier,
                               VotingClassifier)
+from sklearn.exceptions import ConvergenceWarning
+from sklearn.experimental import enable_iterative_imputer
+from sklearn.feature_extraction import text
+from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.gaussian_process import GaussianProcessClassifier
+from sklearn.impute import IterativeImputer
 from sklearn.metrics import confusion_matrix, get_scorer
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import GridSearchCV, train_test_split
 from sklearn.naive_bayes import GaussianNB, MultinomialNB
 from sklearn.neighbors import KNeighborsClassifier
+from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 from skopt import BayesSearchCV
-from sklearn.model_selection import GridSearchCV
+from tqdm import tqdm
 #from tpot import TPOTClassifier
 from xgboost import XGBClassifier, XGBRegressor, XGBRFRegressor
-import os
-from sklearn.neural_network import MLPClassifier
-from sklearn.exceptions import ConvergenceWarning
-from sklearn.feature_extraction import text
-from sklearn.feature_extraction.text import TfidfVectorizer
-from joblib import dump, load
-import sys
-from imblearn.over_sampling import RandomOverSampler
-import logging
+
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 
 def _flush_intermediate_steps(obj, label_list = [''], dth=None, index=False, output_type='gzip', overwrite=True):
@@ -242,7 +245,9 @@ def evaluation(individual, automl_obj, y):
 
     if automl_obj.YisCategorical(y):
         #confusion matrix
-        result_row['confusion_matrix'] = confusion_matrix(automl_obj.y_test_map[y], opt.best_estimator_.predict(X_test2), labels=automl_obj.y_classes_map[y])
+        #labels = automl_obj.y_classes_map[y]
+        labels = None #TODO: fix this in multi-class case
+        result_row['confusion_matrix'] = confusion_matrix(automl_obj.y_test_map[y], opt.best_estimator_.predict(X_test2), labels=labels)
 
     if (is_Voting_or_Stacking(algo_instance)
         and len(algo_instance.estimators)>0):
@@ -361,22 +366,15 @@ def optimize_pandas():
 def ray_init():
     ray.init(ignore_reinit_error=True, _redis_password="password")
 
-def __train_test_split(automlobj, y_col_name):
-    y = automlobj.y_full[y_col_name]
-
-    stratify=None
-    if automlobj.YisCategorical(y_col_name):
-        stratify = y
-        
-    return train_test_split(automlobj.X, y, train_size=0.8, test_size=0.2, random_state=automlobj.RANDOM_STATE, stratify=stratify)
-
 def parallel_process_y(automlobj, y):
     y_encoder = None
     y_full = automlobj.y_full[y]
     y_classes = None
+    stratify=None
 
     if automlobj.YisCategorical(y):
         logging.info('[' + y + '] ML problem type: Classification')
+        stratify = y_full
         y_classes = np.sort(automlobj.y_full[y].unique())
         if y_full.dtype == 'object':
             #encoding
@@ -388,7 +386,7 @@ def parallel_process_y(automlobj, y):
 
     #splitting dataset
     logging.info('[' + y + ']    Splitting dataset...')
-    X_train, X_test, y_train, y_test = __train_test_split(automlobj, y)
+    X_train, X_test, y_train, y_test = train_test_split(automlobj.X, y_full, train_size=0.8, test_size=0.2, random_state=automlobj.RANDOM_STATE, stratify=stratify)
     logging.info('[' + y + ']   X_train dimensions: ' + str(X_train.shape))
     logging.info('[' + y + ']   y_train dimensions: ' + str(y_train.shape))
     y_train = np.asanyarray(y_train).reshape(-1, 1).ravel()
@@ -558,9 +556,6 @@ def default_algorithms(n_jobs):
         GradientBoostingRegressor:{},    
     }    
   
-from tqdm import tqdm
-import re
-
 def preprocess_text(text_data):
     
     stopwords= ['i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves', 'you', "you're", "you've",\
@@ -625,6 +620,7 @@ class AutoML:
                  , do_redundance_test_X = False
                  , n_jobs = 1
                  , n_folds_cv = 10
+                 , drop_nan_values = False
                  ) -> None:
         self.start_time = datetime.now()
 
@@ -667,15 +663,19 @@ class AutoML:
                 ds_source = pd.read_parquet(ds_source)
         
         logging.info('Optimizing the source dataset:')
-        ds_source = reduce_mem_usage(ds_source)
+        ds = reduce_mem_usage(ds_source)
+        del(ds_source) #free memory
+        logging.info('Original dataset dimensions: ' + str(ds.shape))
         
-        logging.info('Original dataset dimensions: ' + str(ds_source.shape))
         #NaN values
-        ds = ds_source.dropna()
-        logging.info('Dataset dimensions after drop NaN values: ' + str(ds.shape))
+        self.iterative_imputer = None
+        if drop_nan_values:
+            ds = ds.dropna()
+            logging.info('Dataset dimensions after drop NaN values: ' + str(ds.shape))
         
         #shuffle data to minimize bias tendency
         ds = ds.sample(frac=ds_sample_frac)
+        
         if flush_intermediate_steps:
             _flush_intermediate_steps(ds, [self.ds_name, 'sample_frac', str(int(ds_sample_frac*100))])
 
@@ -704,7 +704,7 @@ class AutoML:
                 if len(self.X[col].unique()) <= self.__unique_categoric_limit:
                     self.hot_columns.append(col)
                 else:
-                   self.str_columns.append(col)
+                    self.str_columns.append(col)
         
         self.tfidf_vectorizers_map = {}
         
@@ -720,22 +720,26 @@ class AutoML:
             self.X = self.X.drop(self.str_columns, axis=1)
             logging.info('X dimensions after Tfidf: ' + str(self.X.shape))
             
-            
         if len(self.hot_columns) > 0:
             logging.info('One hot encoder columns: ' +str(self.hot_columns))
             self.__onehot_encoder.fit(self.X[self.hot_columns])
-            
-            hot_cols_names = []
-            
+            self.hot_cols_names = []
             for i, name in enumerate(self.__onehot_encoder.feature_names_in_):
                 for cat in self.__onehot_encoder.categories_[i]:
-                    hot_cols_names.append(name + '_' + cat.lower().replace(' ','_'))
+                    self.hot_cols_names.append(name + '_' + str(cat).lower().replace(' ','_'))
             temp_df = self.__onehot_encoder.transform(self.X[self.hot_columns])
-            temp_df = pd.DataFrame(temp_df , columns=hot_cols_names)        
+            temp_df = pd.DataFrame(temp_df , columns=self.hot_cols_names) 
             self.X = pd.concat([self.X.reset_index(drop=True), temp_df], axis=1)
             self.X = self.X.drop(self.hot_columns, axis=1)
             del(temp_df)
             logging.info('X dimensions after One hot encoder: ' + str(self.X.shape))
+
+        if not drop_nan_values:
+            #inpuiting values for X NaN values
+            self.iterative_imputer = IterativeImputer(random_state=self.RANDOM_STATE)
+            if sum(self.X.isna().sum()) > 0: #there are nan values
+                self.X = pd.DataFrame(self.iterative_imputer.fit_transform(self.X)
+                                        , columns=self.X.columns)
 
         #normalizing the variables
         logging.info('Normalizing the variables...')
@@ -756,6 +760,10 @@ class AutoML:
                 self.metrics_classification_map[y] = ['roc_auc', 'f1', 'accuracy']
         #metrics reference: https://scikit-learn.org/stable/modules/model_evaluation.html
 
+        #initializing control maps
+        for y in self.y_colname_list:
+            self.YisCategorical(y)
+        
         result_list = Parallel(n_jobs=self.n_jobs, backend='multiprocessing')(delayed(parallel_process_y) 
                                 (self, y)
                                 for y in self.y_colname_list)
@@ -767,19 +775,23 @@ class AutoML:
             self.y_encoder_map[y] = tuple_result[2]
             self.y_full[y] = tuple_result[3]
             self.y_classes_map[y] = tuple_result[4]
-            if self.YisCategorical(y) and len(self.y_classes_map[y]) == 2: #binary classification
-                #adjusting the metrics for multiclass target
-                for j, m in enumerate(self.metrics_classification_map[y]):
-                    if m == 'f1':
-                        self.metrics_classification_map[y][j] = 'f1_weighted'
-                    elif m == 'roc_auc':
-                        self.metrics_classification_map[y][j] = 'roc_auc_ovr_weighted'
-                    elif m == 'accuracy':
-                        self.metrics_classification_map[y][j] = 'balanced_accuracy'
-                    elif m == 'recall':
-                        self.metrics_classification_map[y][j] = 'recall_weighted'
-                    elif m == 'precision':
-                        self.metrics_classification_map[y][j] = 'precision_weighted'
+            if self.YisCategorical(y):
+                if len(self.y_classes_map[y]) > 2: #multi-class classification
+                    #adjusting the metrics
+                    for j, m in enumerate(self.metrics_classification_map[y]):
+                        if m == 'f1':
+                            self.metrics_classification_map[y][j] = 'f1_weighted'
+                        #elif m == 'roc_auc':
+                        #    self.metrics_classification_map[y][j] = 'roc_auc_ovr_weighted'
+                        #elif m == 'accuracy':
+                        #    self.metrics_classification_map[y][j] = 'balanced_accuracy'
+                        elif m == 'recall':
+                            self.metrics_classification_map[y][j] = 'recall_weighted'
+                        elif m == 'precision':
+                            self.metrics_classification_map[y][j] = 'precision_weighted'
+                    #roc_auc is not available for multi-class
+                    self.metrics_classification_map[y] = [m for m in self.metrics_classification_map[y] if m != 'roc_auc'] 
+                    
             logging.info('[' + y + '] Applied metrics: ' + str(self.metrics_classification_map[y]))
             #X_train, X_test, y_train, y_test
             self.X_train_map[y] = tuple_result[5]
@@ -818,11 +830,13 @@ class AutoML:
         if os.path.exists(test_path):
             for file in os.listdir(test_path):
                 if file.endswith('.csv'):
+                    logging.info('Processing test file: ' + str(file))
                     file_path = os.path.join(test_path, file)
                     df_test = pd.read_csv(file_path)
                     df_test = df_test.drop(columns=self.y_colname_list)
-                    col_list = list(df_test.columns)
-                    for col in col_list:
+                    
+                    #tfidf
+                    for col in df_test.columns:
                         if col in self.str_columns:
                             tfidf_vect = self.tfidf_vectorizers_map[col]
                             X_tfidf = tfidf_vect.transform(preprocess_text(df_test[col]))
@@ -830,10 +844,22 @@ class AutoML:
                             X_tfidf.columns = tfidf_vect.get_feature_names_out(X_tfidf.columns)
                             X_tfidf = X_tfidf.add_prefix(col + '_')
                             df_test = pd.concat([df_test.reset_index(drop=True), X_tfidf.reset_index(drop=True)], axis=1)
-                        elif col in self.hot_columns:
-                            continue #TODO
-                        elif col not in self.getFeaturesNames(y):
-                            df_test = df_test.drop(columns=[col])
+                    
+                    #hot encoding
+                    X_hot = self.__onehot_encoder.transform(df_test[self.hot_columns])
+                    X_hot = pd.DataFrame(X_hot , columns=self.hot_cols_names)        
+                    df_test = pd.concat([df_test.reset_index(drop=True), X_hot], axis=1)
+                    df_test = df_test.drop(self.hot_columns, axis=1)
+
+                    if drop_nan_values:
+                        df_test = df_test.dropna()
+                        logging.info('Test dataset dimensions after drop NaN values: ' + str(df_test.shape))
+                    elif sum(df_test.isna().sum()) > 0: #there are nan values
+                        if self.iterative_imputer.estimator is None:
+                            self.iterative_imputer.fit(self.X)
+                        df_test = pd.DataFrame(self.iterative_imputer.transform(df_test)
+                                               , columns=df_test.columns)
+                    #saving in control map
                     self.test_df_map[str(file).replace('.csv', '')] = reduce_mem_usage(df_test)
 
     def clearResults(self):
@@ -996,6 +1022,7 @@ class AutoML:
 #utilitary methods
 
 from cf_matrix import make_confusion_matrix
+
 
 def testAutoMLByCSV(csv_path, y_colname):
     return testAutoML(pd.read_csv(csv_path), y_colname=y_colname)
