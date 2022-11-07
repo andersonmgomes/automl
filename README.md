@@ -1,4 +1,4 @@
 # AutoML
 
-Biblioteca experimental de AutoML, que usa algoritmo genético, multiprocessamento e otimização de hiper-parâmetros para resolução de problemas de aprendizagem supervisionada (classificação e regressão).
+Experimental Automl library, which uses genetic algorithm, multiprocessing and hyper-parameter optimization to solve supervised learning problems (classification and regression).
 
